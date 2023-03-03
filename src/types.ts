@@ -13,12 +13,24 @@ export enum IDEApiActions {
   JumpToMonitoringClass = "jumpToMonitoringClass",
 }
 
+type MonitoringData = {
+  fqn: string,
+  description: string
+}
+
+type CommunicationLink = {
+  sourceMeshID: string;
+  targetMeshID: string;
+  meshID: string;
+}
+
 export type IDEApiCall = {
   action: IDEApiActions;
   data: OrderTuple[];
   meshId: string;
   occurrenceID: number;
   fqn: string;
+  foundationCommunicationLinks: CommunicationLink[]
 };
 
 export type ParentOrder = {

@@ -36,7 +36,7 @@ io.on("connection", (socket) => {
     socket.broadcast.emit(IDEApiDest.IDEDo, data);
   });
 
-  socket.on(IDEApiActions.Refresh, () => {
+  socket.on(IDEApiActions.Refresh, (cls) => {
     console.log(`refresh sent by ${socket.id}`);
     const data: IDEApiCall = {
       action: IDEApiActions.GetVizData,
@@ -44,9 +44,10 @@ io.on("connection", (socket) => {
       fqn: "",
       meshId: "",
       occurrenceID: -1,
+      foundationCommunicationLinks: cls
     };
     socket.emit(IDEApiDest.VizDo, data);
-    // console.log("ideDo")
+    // console.log("ideDo", cls.length)
   });
 
   socket.on("vizDoubleClickOnMesh", (data) => {
