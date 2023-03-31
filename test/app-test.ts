@@ -26,7 +26,7 @@ describe("server", () => {
       socketId: clientSocket.id,
     };
 
-    clientSocket.emit("update-user-info", newUserInfo, (rec: any) => {
+    clientSocket.emit("update-user-info", newUserInfo, () => {
       assert.equal(
         userInfoMap.size,
         1,

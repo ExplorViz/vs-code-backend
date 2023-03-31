@@ -30,11 +30,6 @@ export type UserInfoInitPayload = {
   isFrontend: boolean;
 };
 
-type MonitoringData = {
-  fqn: string;
-  description: string;
-};
-
 type CommunicationLink = {
   sourceMeshID: string;
   targetMeshID: string;

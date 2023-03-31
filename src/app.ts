@@ -35,6 +35,7 @@ io.on("connection", (socket) => {
 
   console.log(`Socket ${socket.id} connected.`);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   socket.on("update-user-info", (data: UserInfoInitPayload, callback: any) => {
     const foundUserId = userInfoMap.get(data.userId);
     if (!foundUserId) {
