@@ -13,16 +13,33 @@ export enum IDEApiActions {
   JumpToMonitoringClass = "jumpToMonitoringClass",
 }
 
+export type UserInfoMap = {
+  userId: string;
+  userInfoObj: UserInfo;
+};
+
+export type UserInfo = {
+  userId: string;
+  socketId: string;
+  room: string;
+};
+
+export type UserInfoInitPayload = {
+  userId: string;
+  socketId: string;
+  isFrontend: boolean;
+};
+
 type MonitoringData = {
-  fqn: string,
-  description: string
-}
+  fqn: string;
+  description: string;
+};
 
 type CommunicationLink = {
   sourceMeshID: string;
   targetMeshID: string;
   meshID: string;
-}
+};
 
 export type IDEApiCall = {
   action: IDEApiActions;
@@ -30,7 +47,7 @@ export type IDEApiCall = {
   meshId: string;
   occurrenceID: number;
   fqn: string;
-  foundationCommunicationLinks: CommunicationLink[]
+  foundationCommunicationLinks: CommunicationLink[];
 };
 
 export type ParentOrder = {

@@ -1,7 +1,14 @@
 import express from "express";
 import { Server } from "socket.io";
 import http from "http";
-import { IDEApiActions, IDEApiCall, IDEApiDest } from "./types";
+import {
+  IDEApiActions,
+  IDEApiCall,
+  IDEApiDest,
+  UserInfo,
+  UserInfoMap,
+  UserInfoInitPayload,
+} from "./types";
 
 const backend = express();
 const server = http.createServer(backend);
@@ -18,6 +25,8 @@ const io = new Server(server, {
   },
 });
 
+const userInfoMap: Map<string, UserInfo> = new Map();
+
 console.log(
   "Max http buffer size for Socket data: " + maxHttpBufferSize / 1e6 + "mb"
 );
@@ -26,6 +35,22 @@ io.on("connection", (socket) => {
   //console.log('Backend Sockets established.');
 
   console.log(`Socket ${socket.id} connected.`);
+
+  socket.on("update-user-info", (data: UserInfoInitPayload) => {
+    const foundUserId = userInfoMap.get(data.userId);
+    if (!foundUserId) {
+      const roomSubChannel = data.isFrontend ? "frontend" : "ide";
+
+      socket.join(data.userId + ":" + roomSubChannel);
+
+      const newUserInfo: UserInfo = {
+        userId: data.userId,
+        room: data.userId,
+        socketId: data.socketId,
+      };
+      userInfoMap.set(data.userId, newUserInfo);
+    }
+  });
 
   socket.on(IDEApiDest.VizDo, (data: IDEApiCall) => {
     console.log("vizDo", data);
@@ -44,7 +69,7 @@ io.on("connection", (socket) => {
       fqn: "",
       meshId: "",
       occurrenceID: -1,
-      foundationCommunicationLinks: cls
+      foundationCommunicationLinks: cls,
     };
     socket.emit(IDEApiDest.VizDo, data);
     // console.log("ideDo", cls.length)
