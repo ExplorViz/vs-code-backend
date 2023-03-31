@@ -6,7 +6,6 @@ import {
   IDEApiCall,
   IDEApiDest,
   UserInfo,
-  UserInfoMap,
   UserInfoInitPayload,
 } from "./types";
 
@@ -36,7 +35,7 @@ io.on("connection", (socket) => {
 
   console.log(`Socket ${socket.id} connected.`);
 
-  socket.on("update-user-info", (data: UserInfoInitPayload) => {
+  socket.on("update-user-info", (data: UserInfoInitPayload, callback: any) => {
     const foundUserId = userInfoMap.get(data.userId);
     if (!foundUserId) {
       const roomSubChannel = data.isFrontend ? "frontend" : "ide";
@@ -49,6 +48,9 @@ io.on("connection", (socket) => {
         socketId: data.socketId,
       };
       userInfoMap.set(data.userId, newUserInfo);
+      if (callback) {
+        callback();
+      }
     }
   });
 
@@ -99,4 +101,4 @@ server.listen(port, () => {
   console.log(`VS Code backend listening on port ${port}`);
 });
 
-export { backend, port, io };
+export { backend, port, io, server, userInfoMap };
