@@ -8,6 +8,7 @@ import {
   UserInfo,
   UserInfoInitPayload,
 } from "./types";
+import logger from "./logger";
 
 const backend = express();
 let server: http.Server;
@@ -36,14 +37,14 @@ export function setupServer(port?: number) {
     },
   });
 
-  console.debug(
+  logger.debug(
     "Max http buffer size for Socket data: " + maxHttpBufferSize / 1e6 + "mb"
   );
 
   io.on("connection", (socket) => {
-    //console.debug('Backend Sockets established.');
+    //logger.debug('Backend Sockets established.');
 
-    console.debug(`Socket ${socket.id} connected.`);
+    logger.debug(`Socket ${socket.id} connected.`);
 
     socket.on(
       "update-user-info",
@@ -79,16 +80,16 @@ export function setupServer(port?: number) {
     );
 
     socket.on(IDEApiDest.VizDo, (data: IDEApiCall) => {
-      console.debug("vizDo", data);
+      logger.debug("vizDo", data);
       socket.broadcast.emit(IDEApiDest.VizDo, data);
     });
     socket.on(IDEApiDest.IDEDo, (data: IDEApiCall) => {
-      console.debug("ideDo", data);
+      logger.debug("ideDo", data);
       socket.broadcast.emit(IDEApiDest.IDEDo, data);
     });
 
     socket.on(IDEApiActions.Refresh, (cls) => {
-      console.debug(`refresh sent by ${socket.id}`);
+      logger.debug(`refresh sent by ${socket.id}`);
       const data: IDEApiCall = {
         action: IDEApiActions.GetVizData,
         data: [],
@@ -98,31 +99,31 @@ export function setupServer(port?: number) {
         foundationCommunicationLinks: cls,
       };
       socket.emit(IDEApiDest.VizDo, data);
-      // console.debug("ideDo", cls.length)
+      // logger.debug("ideDo", cls.length)
     });
 
     socket.on("vizDoubleClickOnMesh", (data) => {
-      console.debug("vizDoubleClickOnMesh: ", data);
+      logger.debug("vizDoubleClickOnMesh: ", data);
     });
 
     socket.on("disconnect", (reason) => {
-      console.error(`Socket ${socket.id} disconnected, reason: ${reason}`);
+      logger.debug(`Socket ${socket.id} disconnected, reason: ${reason}`);
       // console.error(`Possible solution: Increase current maxHttpBufferSize of ` + (maxHttpBufferSize / 1e6) + "mb");
     });
   });
 
   // backend.get('/', (req, res) => {
-  //   console.debug('/');
+  //   logger.debug('/');
   //   res.send('Hello World!!');
   // });
 
   // backend.get('/testOne', (req, res) => {
-  //   console.debug('/ testOne');
+  //   logger.debug('/ testOne');
   //   res.send('testOne');
   // });
 
   server.listen(port, () => {
-    console.debug(`VS Code backend listening on port ${port}`);
+    logger.debug(`VS Code backend listening on port ${port}`);
   });
 }
 
