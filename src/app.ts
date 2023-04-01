@@ -10,96 +10,122 @@ import {
 } from "./types";
 
 const backend = express();
-const server = http.createServer(backend);
+let server: http.Server;
 const maxHttpBufferSize = 1e8;
+let io;
 
-const port = 3000;
+const defaultPort = 3000;
 const corsExplorVizHttp = "http://localhost:4200";
 
-const io = new Server(server, {
-  maxHttpBufferSize: maxHttpBufferSize,
-  cors: {
-    origin: corsExplorVizHttp,
-    methods: ["GET", "POST"],
-  },
-});
+let userInfoMap: Map<string, UserInfo> = new Map();
 
-const userInfoMap: Map<string, UserInfo> = new Map();
+export function setupServer(port?: number) {
+  userInfoMap = new Map();
 
-console.log(
-  "Max http buffer size for Socket data: " + maxHttpBufferSize / 1e6 + "mb"
-);
+  server = http.createServer(backend);
 
-io.on("connection", (socket) => {
-  //console.log('Backend Sockets established.');
+  if (!port) {
+    port = defaultPort;
+  }
 
-  console.log(`Socket ${socket.id} connected.`);
+  io = new Server(server, {
+    maxHttpBufferSize: maxHttpBufferSize,
+    cors: {
+      origin: corsExplorVizHttp,
+      methods: ["GET", "POST"],
+    },
+  });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  socket.on("update-user-info", (data: UserInfoInitPayload, callback: any) => {
-    const foundUserId = userInfoMap.get(data.userId);
-    if (!foundUserId) {
-      const roomSubChannel = data.isFrontend ? "frontend" : "ide";
+  console.debug(
+    "Max http buffer size for Socket data: " + maxHttpBufferSize / 1e6 + "mb"
+  );
 
-      socket.join(data.userId + ":" + roomSubChannel);
+  io.on("connection", (socket) => {
+    //console.debug('Backend Sockets established.');
 
-      const newUserInfo: UserInfo = {
-        userId: data.userId,
-        room: data.userId,
-        socketId: data.socketId,
-      };
-      userInfoMap.set(data.userId, newUserInfo);
-      if (callback) {
-        callback();
+    console.debug(`Socket ${socket.id} connected.`);
+
+    socket.on(
+      "update-user-info",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (data: UserInfoInitPayload, callback: any) => {
+        const foundUserId = userInfoMap.get(data.userId);
+        if (!foundUserId) {
+          const roomSubChannel = data.isFrontend ? "frontend" : "ide";
+
+          socket.join(data.userId + ":" + roomSubChannel);
+
+          const newUserInfo: UserInfo = {
+            userId: data.userId,
+            room: data.userId,
+            socketId: data.socketId,
+          };
+          userInfoMap.set(data.userId, newUserInfo);
+          if (callback) {
+            callback();
+          }
+        } else {
+          const updatedUserInfo: UserInfo = {
+            userId: data.userId,
+            room: data.userId,
+            socketId: data.socketId,
+          };
+          userInfoMap.set(data.userId, updatedUserInfo);
+          if (callback) {
+            callback();
+          }
+        }
       }
-    }
+    );
+
+    socket.on(IDEApiDest.VizDo, (data: IDEApiCall) => {
+      console.debug("vizDo", data);
+      socket.broadcast.emit(IDEApiDest.VizDo, data);
+    });
+    socket.on(IDEApiDest.IDEDo, (data: IDEApiCall) => {
+      console.debug("ideDo", data);
+      socket.broadcast.emit(IDEApiDest.IDEDo, data);
+    });
+
+    socket.on(IDEApiActions.Refresh, (cls) => {
+      console.debug(`refresh sent by ${socket.id}`);
+      const data: IDEApiCall = {
+        action: IDEApiActions.GetVizData,
+        data: [],
+        fqn: "",
+        meshId: "",
+        occurrenceID: -1,
+        foundationCommunicationLinks: cls,
+      };
+      socket.emit(IDEApiDest.VizDo, data);
+      // console.debug("ideDo", cls.length)
+    });
+
+    socket.on("vizDoubleClickOnMesh", (data) => {
+      console.debug("vizDoubleClickOnMesh: ", data);
+    });
+
+    socket.on("disconnect", (reason) => {
+      console.error(`Socket ${socket.id} disconnected, reason: ${reason}`);
+      // console.error(`Possible solution: Increase current maxHttpBufferSize of ` + (maxHttpBufferSize / 1e6) + "mb");
+    });
   });
 
-  socket.on(IDEApiDest.VizDo, (data: IDEApiCall) => {
-    console.log("vizDo", data);
-    socket.broadcast.emit(IDEApiDest.VizDo, data);
+  // backend.get('/', (req, res) => {
+  //   console.debug('/');
+  //   res.send('Hello World!!');
+  // });
+
+  // backend.get('/testOne', (req, res) => {
+  //   console.debug('/ testOne');
+  //   res.send('testOne');
+  // });
+
+  server.listen(port, () => {
+    console.debug(`VS Code backend listening on port ${port}`);
   });
-  socket.on(IDEApiDest.IDEDo, (data: IDEApiCall) => {
-    console.log("ideDo", data);
-    socket.broadcast.emit(IDEApiDest.IDEDo, data);
-  });
+}
 
-  socket.on(IDEApiActions.Refresh, (cls) => {
-    console.log(`refresh sent by ${socket.id}`);
-    const data: IDEApiCall = {
-      action: IDEApiActions.GetVizData,
-      data: [],
-      fqn: "",
-      meshId: "",
-      occurrenceID: -1,
-      foundationCommunicationLinks: cls,
-    };
-    socket.emit(IDEApiDest.VizDo, data);
-    // console.log("ideDo", cls.length)
-  });
+//setupServer();
 
-  socket.on("vizDoubleClickOnMesh", (data) => {
-    console.log("vizDoubleClickOnMesh: ", data);
-  });
-
-  socket.on("disconnect", (reason) => {
-    console.error(`Socket ${socket.id} disconnected, reason: ${reason}`);
-    // console.error(`Possible solution: Increase current maxHttpBufferSize of ` + (maxHttpBufferSize / 1e6) + "mb");
-  });
-});
-
-// backend.get('/', (req, res) => {
-//   console.log('/');
-//   res.send('Hello World!!');
-// });
-
-// backend.get('/testOne', (req, res) => {
-//   console.log('/ testOne');
-//   res.send('testOne');
-// });
-
-server.listen(port, () => {
-  console.log(`VS Code backend listening on port ${port}`);
-});
-
-export { backend, port, io, server, userInfoMap };
+export { backend, io, server, userInfoMap };
