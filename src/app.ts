@@ -9,6 +9,7 @@ import {
   UserInfoInitPayload,
 } from "./types";
 import logger from "./logger";
+import * as util from "util";
 
 const backend = express();
 let server: http.Server;
@@ -54,7 +55,19 @@ export function setupServer(port?: number) {
         if (!foundUserId) {
           const roomSubChannel = data.isFrontend ? "frontend" : "ide";
 
+          logger.debug(
+            {
+              event: util.inspect(socket.rooms),
+            },
+            "rooms obj before join"
+          );
+
           socket.join(data.userId + ":" + roomSubChannel);
+
+          logger.debug(
+            { event: util.inspect(socket.rooms) },
+            "rooms obj after join"
+          );
 
           const newUserInfo: UserInfo = {
             userId: data.userId,
