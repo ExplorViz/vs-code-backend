@@ -13,6 +13,10 @@ export enum IDEApiActions {
   JumpToMonitoringClass = "jumpToMonitoringClass",
 }
 
+export type RoomJoinPayload = {
+  roomId: string;
+};
+
 export type UserInfoMap = {
   userId: string;
   userInfoObj: UserInfo;
@@ -26,7 +30,6 @@ export type UserInfo = {
 
 export type UserInfoInitPayload = {
   userId: string;
-  socketId: string;
   isFrontend: boolean;
 };
 

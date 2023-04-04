@@ -7,14 +7,16 @@ import {
   IDEApiDest,
   UserInfo,
   UserInfoInitPayload,
+  RoomJoinPayload,
 } from "./types";
 import logger from "./logger";
 import * as util from "util";
+import { DefaultEventsMap } from "socket.io/dist/typed-events";
 
 const backend = express();
 let server: http.Server;
 const maxHttpBufferSize = 1e8;
-let io;
+let io: Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, any>;
 
 const defaultPort = 3000;
 const corsExplorVizHttp = "http://localhost:4200";
@@ -43,9 +45,20 @@ export function setupServer(port?: number) {
   );
 
   io.on("connection", (socket) => {
-    //logger.debug('Backend Sockets established.');
-
     logger.debug(`Socket ${socket.id} connected.`);
+
+    socket.on(
+      "join-custom-room",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (data: RoomJoinPayload, callback: any) => {
+        const roomSubChannel = "ide";
+        socket.join(data.roomId + ":" + roomSubChannel);
+
+        if (callback) {
+          callback();
+        }
+      }
+    );
 
     socket.on(
       "update-user-info",
@@ -53,9 +66,9 @@ export function setupServer(port?: number) {
       (data: UserInfoInitPayload, callback: any) => {
         const foundUserId = userInfoMap.get(data.userId);
         if (!foundUserId) {
-          const roomSubChannel = data.isFrontend ? "frontend" : "ide";
+          const roomSubChannel = "frontend";
 
-          logger.debug(
+          logger.trace(
             {
               event: util.inspect(socket.rooms),
             },
@@ -65,6 +78,12 @@ export function setupServer(port?: number) {
           socket.join(data.userId + ":" + roomSubChannel);
 
           logger.debug(
+            `Socket ${socket.id} joined room ${
+              data.userId + ":" + roomSubChannel
+            }.`
+          );
+
+          logger.trace(
             { event: util.inspect(socket.rooms) },
             "rooms obj after join"
           );
@@ -72,7 +91,7 @@ export function setupServer(port?: number) {
           const newUserInfo: UserInfo = {
             userId: data.userId,
             room: data.userId,
-            socketId: data.socketId,
+            socketId: socket.id,
           };
           userInfoMap.set(data.userId, newUserInfo);
           if (callback) {
@@ -82,7 +101,7 @@ export function setupServer(port?: number) {
           const updatedUserInfo: UserInfo = {
             userId: data.userId,
             room: data.userId,
-            socketId: data.socketId,
+            socketId: socket.id,
           };
           userInfoMap.set(data.userId, updatedUserInfo);
           if (callback) {
