@@ -12,6 +12,19 @@ import {
 import logger from "./logger";
 import * as util from "util";
 import { DefaultEventsMap } from "socket.io/dist/typed-events";
+import {
+  uniqueNamesGenerator,
+  Config,
+  adjectives,
+  colors,
+  animals,
+} from "unique-names-generator";
+
+const customNamesGeneratorConfig: Config = {
+  dictionaries: [adjectives, colors, animals],
+  separator: "-",
+  length: 3,
+};
 
 const backend = express();
 let server: http.Server;
@@ -75,11 +88,15 @@ export function setupServer(port?: number) {
             "rooms obj before join"
           );
 
-          socket.join(data.userId + ":" + roomSubChannel);
+          const uniqueRoomName = uniqueNamesGenerator(
+            customNamesGeneratorConfig
+          );
+
+          socket.join(uniqueRoomName + ":" + roomSubChannel);
 
           logger.debug(
             `Socket ${socket.id} joined room ${
-              data.userId + ":" + roomSubChannel
+              uniqueRoomName + ":" + roomSubChannel
             }.`
           );
 
@@ -90,22 +107,24 @@ export function setupServer(port?: number) {
 
           const newUserInfo: UserInfo = {
             userId: data.userId,
-            room: data.userId,
+            room: uniqueRoomName,
             socketId: socket.id,
           };
           userInfoMap.set(data.userId, newUserInfo);
           if (callback) {
-            callback();
+            callback(uniqueRoomName);
           }
         } else {
+          const { room } = foundUserId;
+
           const updatedUserInfo: UserInfo = {
             userId: data.userId,
-            room: data.userId,
+            room: room,
             socketId: socket.id,
           };
           userInfoMap.set(data.userId, updatedUserInfo);
           if (callback) {
-            callback();
+            callback(room);
           }
         }
       }
