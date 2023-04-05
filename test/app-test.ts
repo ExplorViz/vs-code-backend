@@ -2,6 +2,14 @@ import Client, { Socket } from "socket.io-client";
 import { assert } from "chai";
 import { server, io, userInfoMap, setupServer } from "../src/app";
 import * as util from "util";
+import {
+  IDEApiActions,
+  IDEApiCall,
+  IDEApiDest,
+  UserInfo,
+  UserInfoInitPayload,
+  RoomJoinPayload,
+} from "../src/types";
 
 describe("Server ...", () => {
   let clientSocket: Socket;
@@ -258,9 +266,7 @@ describe("Server ...", () => {
     assert.equal(userInfoMap.size, 0, "UserInfoMap should be empty");
 
     clientSocket2 = Client(`http://localhost:3000`);
-    clientSocket2.on("connect", () => {
-      console.log("init done");
-    });
+    clientSocket2.on("connect", () => {});
 
     const newUserInfo = {
       userId: "123",
@@ -270,8 +276,6 @@ describe("Server ...", () => {
       roomId: "change-in-test",
     };
 
-    console.debug("before:" + util.inspect(io.sockets.adapter.rooms));
-
     clientSocket.emit("update-user-info", newUserInfo, (room: string) => {
       idePayload.roomId = room;
       clientSocket2.emit("join-custom-room", idePayload, () => {
@@ -280,6 +284,116 @@ describe("Server ...", () => {
           io.sockets.adapter.rooms.get(`${room}:ide`)?.has(clientSocket2.id)
         );
         done();
+      });
+    });
+  });
+
+  // Interaction
+
+  it("should emit events to frontend subchannel of room when initiated by ide subchannel of same room.", (done) => {
+    clientSocket2 = Client(`http://localhost:3000`);
+
+    clientSocket2.on("connect", () => {
+      const newUserInfo = {
+        userId: "123",
+      };
+
+      const idePayload = {
+        roomId: "change-in-test",
+      };
+
+      const testData = { test: "test" };
+
+      clientSocket.on(IDEApiDest.VizDo, (data) => {
+        assert.equal(
+          JSON.stringify(data),
+          JSON.stringify(testData),
+          "Sent data is not correct."
+        );
+        done();
+      });
+
+      clientSocket.emit("update-user-info", newUserInfo, (room: string) => {
+        idePayload.roomId = room;
+
+        clientSocket2.emit("join-custom-room", idePayload, () => {
+          clientSocket2.emit(IDEApiDest.VizDo, testData);
+        });
+      });
+    });
+  });
+
+  it("should emit events to ide subchannel of room when initiated by frontend subchannel of same room.", (done) => {
+    clientSocket2 = Client(`http://localhost:3000`);
+
+    clientSocket2.on("connect", () => {
+      const newUserInfo = {
+        userId: "123",
+      };
+
+      const idePayload = {
+        roomId: "change-in-test",
+      };
+
+      const testData = { test: "test" };
+
+      clientSocket2.on(IDEApiDest.IDEDo, (data) => {
+        assert.equal(
+          JSON.stringify(data),
+          JSON.stringify(testData),
+          "Sent data is not correct."
+        );
+        done();
+      });
+
+      clientSocket.emit("update-user-info", newUserInfo, (room: string) => {
+        idePayload.roomId = room;
+
+        clientSocket2.emit("join-custom-room", idePayload, () => {
+          clientSocket.emit(IDEApiDest.IDEDo, testData);
+        });
+      });
+    });
+  });
+
+  it("should emit refresh event to ide subchannel of roome when initiated by frontend subchannel of same room.", (done) => {
+    clientSocket2 = Client(`http://localhost:3000`);
+
+    clientSocket2.on("connect", () => {
+      const newUserInfo = {
+        userId: "123",
+      };
+
+      const idePayload = {
+        roomId: "change-in-test",
+      };
+
+      const testData = { test: "test" };
+
+      const expected = {
+        action: "getVizData",
+        data: [],
+        fqn: "",
+        meshId: "",
+        occurrenceID: -1,
+        foundationCommunicationLinks: testData,
+      };
+
+      clientSocket2.on(IDEApiDest.VizDo, (data) => {
+        assert.equal(
+          JSON.stringify(data),
+          JSON.stringify(expected),
+          "Sent data is not correct."
+        );
+        done();
+      });
+
+      clientSocket.emit("update-user-info", newUserInfo, (room: string) => {
+        idePayload.roomId = room;
+
+        clientSocket2.emit("join-custom-room", idePayload, () => {
+          clientSocket.emit(IDEApiActions.Refresh, testData);
+        });
       });
     });
   });

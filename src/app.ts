@@ -65,10 +65,11 @@ export function setupServer(port?: number) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (data: RoomJoinPayload, callback: any) => {
         const roomSubChannel = "ide";
-        socket.join(data.roomId + ":" + roomSubChannel);
+        const roomToJoin = data.roomId + ":" + roomSubChannel;
+        socket.join(roomToJoin);
 
         if (callback) {
-          callback();
+          callback(roomToJoin);
         }
       }
     );
@@ -131,12 +132,62 @@ export function setupServer(port?: number) {
     );
 
     socket.on(IDEApiDest.VizDo, (data: IDEApiCall) => {
-      logger.debug("vizDo", data);
-      socket.broadcast.emit(IDEApiDest.VizDo, data);
+      logger.debug({ event: data }, "vizDo");
+
+      let room = "";
+
+      const roomSet = io.sockets.adapter.sids.get(socket.id)?.values();
+
+      if (!roomSet) {
+        logger.error(
+          `Room set for Socket ${socket.id} is undefined, but shouldn't be. Event will not be emitted.`
+        );
+        return;
+      }
+
+      for (const roomName of roomSet) {
+        if (roomName.includes(":frontend") || roomName.includes(":ide")) {
+          room = roomName;
+          break;
+        }
+      }
+
+      if (room) {
+        const oppositeRoom = room.includes(":frontend")
+          ? room.replace(":frontend", ":ide")
+          : room.replace(":ide", ":frontend");
+        socket.to(oppositeRoom).emit(IDEApiDest.VizDo, data);
+      }
     });
+
     socket.on(IDEApiDest.IDEDo, (data: IDEApiCall) => {
       logger.debug("ideDo", data);
-      socket.broadcast.emit(IDEApiDest.IDEDo, data);
+
+      let room = "";
+
+      const roomSet = io.sockets.adapter.sids.get(socket.id)?.values();
+
+      if (!roomSet) {
+        logger.error(
+          `Room set for Socket ${socket.id} is undefined, but shouldn't be. Event will not be emitted.`
+        );
+        return;
+      }
+
+      for (const roomName of roomSet) {
+        if (roomName.includes(":frontend") || roomName.includes(":ide")) {
+          room = roomName;
+          break;
+        }
+      }
+
+      if (room) {
+        const oppositeRoom = room.includes(":frontend")
+          ? room.replace(":frontend", ":ide")
+          : room.replace(":ide", ":frontend");
+
+        socket.to(oppositeRoom).emit(IDEApiDest.IDEDo, data);
+      }
     });
 
     socket.on(IDEApiActions.Refresh, (cls) => {
@@ -149,18 +200,43 @@ export function setupServer(port?: number) {
         occurrenceID: -1,
         foundationCommunicationLinks: cls,
       };
-      socket.emit(IDEApiDest.VizDo, data);
+
+      let room = "";
+
+      const roomSet = io.sockets.adapter.sids.get(socket.id)?.values();
+
+      if (!roomSet) {
+        logger.error(
+          `Room set for Socket ${socket.id} is undefined, but shouldn't be. Event will not be emitted.`
+        );
+        return;
+      }
+
+      for (const roomName of roomSet) {
+        if (roomName.includes(":frontend") || roomName.includes(":ide")) {
+          room = roomName;
+          break;
+        }
+      }
+
+      if (room) {
+        const oppositeRoom = room.includes(":frontend")
+          ? room.replace(":frontend", ":ide")
+          : room.replace(":ide", ":frontend");
+
+        socket.to(oppositeRoom).emit(IDEApiDest.VizDo, data);
+      }
       // logger.debug("ideDo", cls.length)
     });
 
-    socket.on("vizDoubleClickOnMesh", (data) => {
+    /*socket.on("vizDoubleClickOnMesh", (data) => {
       logger.debug("vizDoubleClickOnMesh: ", data);
-    });
+    });*/
 
-    socket.on("disconnect", (reason) => {
+    /* socket.on("disconnect", (reason) => {
       logger.debug(`Socket ${socket.id} disconnected, reason: ${reason}`);
       // console.error(`Possible solution: Increase current maxHttpBufferSize of ` + (maxHttpBufferSize / 1e6) + "mb");
-    });
+    });*/
   });
 
   // backend.get('/', (req, res) => {
