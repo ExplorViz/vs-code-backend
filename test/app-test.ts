@@ -219,46 +219,57 @@ describe("Server ...", () => {
     assert.equal(userInfoMap.size, 0, "UserInfoMap should be empty");
 
     clientSocket2 = Client(`http://localhost:3000`);
-    clientSocket2.on("connect", done);
+    clientSocket2.on("connect", () => {
+      const newUserInfo = {
+        userId: "123",
+      };
 
-    const newUserInfo = {
-      userId: "123",
-    };
+      const updatedUserInfo = {
+        userId: "123",
+        room: "change-in-test",
+        socketId: clientSocket2.id,
+      };
 
-    const updatedUserInfo = {
-      userId: "123",
-      room: "change-in-test",
-      socketId: clientSocket2.id,
-    };
+      clientSocket.emit("update-user-info", newUserInfo, () => {
+        clientSocket2.emit(
+          "update-user-info",
+          updatedUserInfo,
+          (room: string) => {
+            updatedUserInfo.room = room;
 
-    clientSocket.emit("update-user-info", newUserInfo);
-    clientSocket2.emit("update-user-info", updatedUserInfo, (room: string) => {
-      updatedUserInfo.room = room;
+            assert.equal(
+              userInfoMap.size,
+              1,
+              "UserInfoMap should contain one element"
+            );
 
-      assert.equal(
-        userInfoMap.size,
-        1,
-        "UserInfoMap should contain one element"
-      );
+            assert.equal(
+              userInfoMap.get("123")?.socketId,
+              clientSocket2.id,
+              "UserInfoMap entry has wrong socket id."
+            );
 
-      assert.equal(
-        userInfoMap.get("123")?.socketId,
-        clientSocket2.id,
-        "UserInfoMap entry has wrong socket id."
-      );
+            assert.equal(
+              JSON.stringify(userInfoMap.get("123")),
+              JSON.stringify(updatedUserInfo)
+            );
 
-      assert.equal(
-        JSON.stringify(userInfoMap.get("123")),
-        JSON.stringify(updatedUserInfo)
-      );
+            assert.isTrue(
+              io.sockets.adapter.rooms.has(`${room}:frontend`),
+              "Correct room is missing."
+            );
 
-      assert.isTrue(io.sockets.adapter.rooms.has(`${room}:frontend`));
+            assert.isTrue(
+              io.sockets.adapter.rooms
+                .get(`${room}:frontend`)
+                ?.has(clientSocket2.id),
+              "Room is missing the correct socket."
+            );
 
-      assert.isTrue(
-        io.sockets.adapter.rooms.get(`${room}:frontend`)?.has(clientSocket2.id)
-      );
-
-      done();
+            done();
+          }
+        );
+      });
     });
   });
 

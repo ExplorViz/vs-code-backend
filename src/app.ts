@@ -79,8 +79,9 @@ export function setupServer(port?: number) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (data: UserInfoInitPayload, callback: any) => {
         const foundUserId = userInfoMap.get(data.userId);
+        const roomSubChannel = "frontend";
         if (!foundUserId) {
-          const roomSubChannel = "frontend";
+          console.debug("SPEZIAL", foundUserId);
 
           logger.trace(
             {
@@ -123,6 +124,9 @@ export function setupServer(port?: number) {
             room: room,
             socketId: socket.id,
           };
+
+          socket.join(room + ":" + roomSubChannel);
+
           userInfoMap.set(data.userId, updatedUserInfo);
           if (callback) {
             callback(room);
