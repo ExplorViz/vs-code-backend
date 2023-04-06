@@ -81,8 +81,6 @@ export function setupServer(port?: number) {
         const foundUserId = userInfoMap.get(data.userId);
         const roomSubChannel = "frontend";
         if (!foundUserId) {
-          console.debug("SPEZIAL", foundUserId);
-
           logger.trace(
             {
               event: util.inspect(socket.rooms),
@@ -97,7 +95,7 @@ export function setupServer(port?: number) {
           socket.join(uniqueRoomName + ":" + roomSubChannel);
 
           logger.debug(
-            `Socket ${socket.id} joined room ${
+            `Socket ${socket.id} with username ${data.userId} joined room ${
               uniqueRoomName + ":" + roomSubChannel
             }.`
           );
