@@ -129,6 +129,12 @@ export function setupServer(port?: number) {
 
           socket.join(room + ":" + roomSubChannel);
 
+          logger.debug(
+            `Socket ${socket.id} with username ${data.userId} re-joined room ${
+              room + ":" + roomSubChannel
+            }.`
+          );
+
           userInfoMap.set(data.userId, updatedUserInfo);
           if (callback) {
             callback(room);
