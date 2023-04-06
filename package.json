@@ -7,7 +7,7 @@
     "dev": "nodemon src/*",
     "start": "tsc && node dist/app.js",
     "lint": "eslint . --ext .ts",
-    "test": "nyc mocha -r ts-node/register test/*"
+    "test": "nyc mocha -r ts-node/register src/test/*"
   },
   "repository": {
     "type": "git",

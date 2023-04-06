@@ -37,6 +37,10 @@ const corsExplorVizHttp = "http://localhost:4200";
 let userInfoMap: Map<string, UserInfo> = new Map();
 
 export function setupServer(port?: number) {
+  if (server) {
+    io.close();
+  }
+
   userInfoMap = new Map();
 
   server = http.createServer(backend);
@@ -256,6 +260,6 @@ export function setupServer(port?: number) {
   });
 }
 
-//setupServer();
+setupServer();
 
 export { backend, io, server, userInfoMap };
