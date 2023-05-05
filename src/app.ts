@@ -62,7 +62,7 @@ export function setupServer(port?: number) {
   );
 
   io.on("connection", (socket) => {
-    logger.debug(`Socket ${socket.id} connected.`);
+    logger.trace(`Socket ${socket.id} connected.`);
 
     socket.on(
       "join-custom-room",
@@ -75,6 +75,8 @@ export function setupServer(port?: number) {
         if (callback) {
           callback(roomToJoin);
         }
+
+        logger.debug(`Socket ${socket.id} joined room ${roomToJoin}.`);
       }
     );
 
