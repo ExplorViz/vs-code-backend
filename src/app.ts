@@ -29,7 +29,7 @@ const customNamesGeneratorConfig: Config = {
 const backend = express();
 let server: http.Server;
 const maxHttpBufferSize = 1e8;
-let io: Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, any>;
+let io: Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, unknown>;
 
 const defaultPort = 3000;
 const corsExplorVizHttp = "http://localhost:4200";
@@ -175,8 +175,6 @@ export function setupServer(port?: number) {
     });
 
     socket.on(IDEApiDest.IDEDo, (data: IDEApiCall) => {
-      logger.debug("ideDo", data);
-
       let room = "";
 
       const roomSet = io.sockets.adapter.sids.get(socket.id)?.values();
@@ -199,69 +197,13 @@ export function setupServer(port?: number) {
         const oppositeRoom = room.includes(":frontend")
           ? room.replace(":frontend", ":ide")
           : room.replace(":ide", ":frontend");
-
+        logger.debug(
+          `Send event ${data.action} from ${room} to ${oppositeRoom}`
+        );
         socket.to(oppositeRoom).emit(IDEApiDest.IDEDo, data);
       }
     });
-
-    socket.on(IDEApiActions.Refresh, (cls) => {
-      logger.debug(`refresh sent by ${socket.id}`);
-      const data: IDEApiCall = {
-        action: IDEApiActions.GetVizData,
-        data: [],
-        fqn: "",
-        meshId: "",
-        occurrenceID: -1,
-        foundationCommunicationLinks: cls,
-      };
-
-      let room = "";
-
-      const roomSet = io.sockets.adapter.sids.get(socket.id)?.values();
-
-      if (!roomSet) {
-        logger.error(
-          `Room set for Socket ${socket.id} is undefined, but shouldn't be. Event will not be emitted.`
-        );
-        return;
-      }
-
-      for (const roomName of roomSet) {
-        if (roomName.includes(":frontend") || roomName.includes(":ide")) {
-          room = roomName;
-          break;
-        }
-      }
-
-      if (room) {
-        const oppositeRoom = room.includes(":frontend")
-          ? room.replace(":frontend", ":ide")
-          : room.replace(":ide", ":frontend");
-
-        socket.to(oppositeRoom).emit(IDEApiDest.VizDo, data);
-      }
-      // logger.debug("ideDo", cls.length)
-    });
-
-    /*socket.on("vizDoubleClickOnMesh", (data) => {
-      logger.debug("vizDoubleClickOnMesh: ", data);
-    });*/
-
-    /* socket.on("disconnect", (reason) => {
-      logger.debug(`Socket ${socket.id} disconnected, reason: ${reason}`);
-      // console.error(`Possible solution: Increase current maxHttpBufferSize of ` + (maxHttpBufferSize / 1e6) + "mb");
-    });*/
   });
-
-  // backend.get('/', (req, res) => {
-  //   logger.debug('/');
-  //   res.send('Hello World!!');
-  // });
-
-  // backend.get('/testOne', (req, res) => {
-  //   logger.debug('/ testOne');
-  //   res.send('testOne');
-  // });
 
   server.listen(port, () => {
     logger.debug(`VS Code backend listening on port ${port}`);

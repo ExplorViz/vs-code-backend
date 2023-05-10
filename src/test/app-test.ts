@@ -361,7 +361,7 @@ describe("Server ...", () => {
     });
   });
 
-  it("should emit refresh event to ide subchannel of roome when initiated by frontend subchannel of same room.", (done) => {
+  it("should emit refresh event to ide subchannel of room when initiated by frontend subchannel of same room.", (done) => {
     clientSocket2 = Client(`http://localhost:${port}`);
 
     clientSocket2.on("connect", () => {
@@ -375,8 +375,8 @@ describe("Server ...", () => {
 
       const testData = { test: "test" };
 
-      const expected = {
-        action: "getVizData",
+      const testPayload = {
+        action: IDEApiActions.Refresh,
         data: [],
         fqn: "",
         meshId: "",
@@ -384,7 +384,16 @@ describe("Server ...", () => {
         foundationCommunicationLinks: testData,
       };
 
-      clientSocket2.on(IDEApiDest.VizDo, (data) => {
+      const expected = {
+        action: IDEApiActions.Refresh,
+        data: [],
+        fqn: "",
+        meshId: "",
+        occurrenceID: -1,
+        foundationCommunicationLinks: testData,
+      };
+
+      clientSocket2.on(IDEApiDest.IDEDo, (data) => {
         assert.equal(
           JSON.stringify(data),
           JSON.stringify(expected),
@@ -397,7 +406,7 @@ describe("Server ...", () => {
         idePayload.roomId = room;
 
         clientSocket2.emit("join-custom-room", idePayload, () => {
-          clientSocket.emit(IDEApiActions.Refresh, testData);
+          clientSocket.emit(IDEApiDest.IDEDo, testPayload);
         });
       });
     });
