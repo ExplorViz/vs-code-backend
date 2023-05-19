@@ -76,6 +76,24 @@ export function setupServer(port?: number) {
           callback(roomToJoin);
         }
 
+        const room = getRoomWithSubchannelForSocketId(socket.id);
+        if (room) {
+          const oppositeRoom =
+            getOppositeRoomWithSubchannelForGivenRoomName(room);
+
+          if (oppositeRoom) {
+            const getVizDataPayload = {
+              action: IDEApiActions.GetVizData,
+            };
+
+            logger.debug(
+              `Send event ${getVizDataPayload.action} from ${room} to ${oppositeRoom}`
+            );
+
+            socket.to(oppositeRoom).emit(IDEApiDest.VizDo, getVizDataPayload);
+          }
+        }
+
         logger.debug(`Socket ${socket.id} joined room ${roomToJoin}.`);
       }
     );

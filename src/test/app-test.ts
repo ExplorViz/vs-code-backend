@@ -295,7 +295,7 @@ describe("Server ...", () => {
 
   // Interaction
 
-  it("should emit events to frontend subchannel of room when initiated by ide subchannel of same room.", (done) => {
+  it("should automatically emit getVizData event to frontend subchannel of room when another client joins ide subchannel of same room.", (done) => {
     clientSocket2 = Client(`http://localhost:${port}`);
 
     clientSocket2.on("connect", () => {
@@ -307,13 +307,13 @@ describe("Server ...", () => {
         roomId: "change-in-test",
       };
 
-      const testData = { test: "test" };
+      const expectedData = { action: IDEApiActions.GetVizData };
 
       clientSocket.on(IDEApiDest.VizDo, (data) => {
         assert.equal(
           JSON.stringify(data),
-          JSON.stringify(testData),
-          "Sent data is not correct."
+          JSON.stringify(expectedData),
+          "Automatically sent data is not correct."
         );
         done();
       });
@@ -321,9 +321,7 @@ describe("Server ...", () => {
       clientSocket.emit("update-user-info", newUserInfo, (room: string) => {
         idePayload.roomId = room;
 
-        clientSocket2.emit("join-custom-room", idePayload, () => {
-          clientSocket2.emit(IDEApiDest.VizDo, testData);
-        });
+        clientSocket2.emit("join-custom-room", idePayload);
       });
     });
   });
