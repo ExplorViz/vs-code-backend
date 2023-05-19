@@ -148,59 +148,32 @@ export function setupServer(port?: number) {
     socket.on(IDEApiDest.VizDo, (data: IDEApiCall) => {
       logger.debug({ event: data }, "vizDo");
 
-      let room = "";
-
-      const roomSet = io.sockets.adapter.sids.get(socket.id)?.values();
-
-      if (!roomSet) {
-        logger.error(
-          `Room set for Socket ${socket.id} is undefined, but shouldn't be. Event will not be emitted.`
-        );
-        return;
-      }
-
-      for (const roomName of roomSet) {
-        if (roomName.includes(":frontend") || roomName.includes(":ide")) {
-          room = roomName;
-          break;
-        }
-      }
-
+      const room = getRoomWithSubchannelForSocketId(socket.id);
       if (room) {
-        const oppositeRoom = room.includes(":frontend")
-          ? room.replace(":frontend", ":ide")
-          : room.replace(":ide", ":frontend");
-        socket.to(oppositeRoom).emit(IDEApiDest.VizDo, data);
+        const oppositeRoom =
+          getOppositeRoomWithSubchannelForGivenRoomName(room);
+
+        if (oppositeRoom) {
+          logger.debug(
+            `Send event ${data.action} from ${room} to ${oppositeRoom}`
+          );
+          socket.to(oppositeRoom).emit(IDEApiDest.VizDo, data);
+        }
       }
     });
 
     socket.on(IDEApiDest.IDEDo, (data: IDEApiCall) => {
-      let room = "";
-
-      const roomSet = io.sockets.adapter.sids.get(socket.id)?.values();
-
-      if (!roomSet) {
-        logger.error(
-          `Room set for Socket ${socket.id} is undefined, but shouldn't be. Event will not be emitted.`
-        );
-        return;
-      }
-
-      for (const roomName of roomSet) {
-        if (roomName.includes(":frontend") || roomName.includes(":ide")) {
-          room = roomName;
-          break;
-        }
-      }
-
+      const room = getRoomWithSubchannelForSocketId(socket.id);
       if (room) {
-        const oppositeRoom = room.includes(":frontend")
-          ? room.replace(":frontend", ":ide")
-          : room.replace(":ide", ":frontend");
-        logger.debug(
-          `Send event ${data.action} from ${room} to ${oppositeRoom}`
-        );
-        socket.to(oppositeRoom).emit(IDEApiDest.IDEDo, data);
+        const oppositeRoom =
+          getOppositeRoomWithSubchannelForGivenRoomName(room);
+
+        if (oppositeRoom) {
+          logger.debug(
+            `Send event ${data.action} from ${room} to ${oppositeRoom}`
+          );
+          socket.to(oppositeRoom).emit(IDEApiDest.IDEDo, data);
+        }
       }
     });
   });
@@ -208,6 +181,42 @@ export function setupServer(port?: number) {
   server.listen(port, () => {
     logger.debug(`VS Code backend listening on port ${port}`);
   });
+}
+
+function getRoomWithSubchannelForSocketId(socketId: string) {
+  let room = "";
+
+  const roomSet = io.sockets.adapter.sids.get(socketId)?.values();
+
+  if (!roomSet) {
+    logger.error(
+      `Room set for Socket ${socketId} is undefined, but shouldn't be. Event will not be emitted.`
+    );
+    return;
+  }
+
+  for (const roomName of roomSet) {
+    if (roomName.includes(":frontend") || roomName.includes(":ide")) {
+      room = roomName;
+      break;
+    }
+  }
+
+  return room;
+}
+
+function getOppositeRoomWithSubchannelForGivenRoomName(
+  roomWithSubchannel: string
+) {
+  if (roomWithSubchannel) {
+    const oppositeRoom = roomWithSubchannel.includes(":frontend")
+      ? roomWithSubchannel.replace(":frontend", ":ide")
+      : roomWithSubchannel.replace(":ide", ":frontend");
+
+    return oppositeRoom;
+  } else {
+    return;
+  }
 }
 
 setupServer();
