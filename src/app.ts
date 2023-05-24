@@ -32,7 +32,8 @@ const maxHttpBufferSize = 1e8;
 let io: Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, unknown>;
 
 const defaultPort = 3000;
-const corsExplorVizHttp = "http://localhost:4200";
+
+const socketPath = "/v2/ide/";
 
 let userInfoMap: Map<string, UserInfo> = new Map();
 
@@ -51,8 +52,9 @@ export function setupServer(port?: number) {
 
   io = new Server(server, {
     maxHttpBufferSize: maxHttpBufferSize,
+    path: socketPath,
     cors: {
-      origin: corsExplorVizHttp,
+      origin: "*",
       methods: ["GET", "POST"],
     },
   });
@@ -196,7 +198,7 @@ export function setupServer(port?: number) {
     });
   });
 
-  server.listen(port, () => {
+  server.listen(port, "0.0.0.0", () => {
     logger.debug(`VS Code backend listening on port ${port}`);
   });
 }

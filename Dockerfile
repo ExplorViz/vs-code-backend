@@ -12,4 +12,5 @@ RUN npm install
 COPY . .
 
 EXPOSE 3000
-CMD [ "node", "dist/app.js" ]
+#CMD [ "node", "dist/app.js", "--listen", "host=0.0.0.0" ]
+CMD [ "npm", "run", "start" ]

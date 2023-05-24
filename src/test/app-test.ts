@@ -9,9 +9,17 @@ describe("Server ...", () => {
 
   const port = 3002;
 
+  const socketPath = "/v2/ide/";
+
+  function createNewClient() {
+    return Client(`http://localhost:${port}`, {
+      path: socketPath,
+    });
+  }
+
   beforeEach((done) => {
     setupServer(port);
-    clientSocket = Client(`http://localhost:${port}`);
+    clientSocket = createNewClient();
     clientSocket.on("connect", done);
   });
 
@@ -73,9 +81,9 @@ describe("Server ...", () => {
 
     // include unnecessary socketId and room for easier testing of equality
 
-    const clientSocketTemp1 = Client(`http://localhost:${port}`);
-    const clientSocketTemp2 = Client(`http://localhost:${port}`);
-    const clientSocketTemp3 = Client(`http://localhost:${port}`);
+    const clientSocketTemp1 = createNewClient();
+    const clientSocketTemp2 = createNewClient();
+    const clientSocketTemp3 = createNewClient();
 
     clientSocketTemp1.on("connect", () => {
       clientSocketTemp2.on("connect", () => {
@@ -212,7 +220,7 @@ describe("Server ...", () => {
   it("should receive, have no duplicates of user info, and correct user info", (done) => {
     assert.equal(userInfoMap.size, 0, "UserInfoMap should be empty");
 
-    clientSocket2 = Client(`http://localhost:${port}`);
+    clientSocket2 = createNewClient();
     clientSocket2.on("connect", () => {
       const newUserInfo = {
         userId: "123",
@@ -270,8 +278,10 @@ describe("Server ...", () => {
   it("should use correct room for IDE on custom room joining", (done) => {
     assert.equal(userInfoMap.size, 0, "UserInfoMap should be empty");
 
-    clientSocket2 = Client(`http://localhost:${port}`);
-    clientSocket2.on("connect", () => {});
+    clientSocket2 = createNewClient();
+    clientSocket2.on("connect", () => {
+      // nothing to do
+    });
 
     const newUserInfo = {
       userId: "123",
@@ -296,7 +306,7 @@ describe("Server ...", () => {
   // Interaction
 
   it("should automatically emit getVizData event to frontend subchannel of room when another client joins ide subchannel of same room.", (done) => {
-    clientSocket2 = Client(`http://localhost:${port}`);
+    clientSocket2 = createNewClient();
 
     clientSocket2.on("connect", () => {
       const newUserInfo = {
@@ -327,7 +337,7 @@ describe("Server ...", () => {
   });
 
   it("should emit events to ide subchannel of room when initiated by frontend subchannel of same room.", (done) => {
-    clientSocket2 = Client(`http://localhost:${port}`);
+    clientSocket2 = createNewClient();
 
     clientSocket2.on("connect", () => {
       const newUserInfo = {
@@ -360,7 +370,7 @@ describe("Server ...", () => {
   });
 
   it("should emit refresh event to ide subchannel of room when initiated by frontend subchannel of same room.", (done) => {
-    clientSocket2 = Client(`http://localhost:${port}`);
+    clientSocket2 = createNewClient();
 
     clientSocket2.on("connect", () => {
       const newUserInfo = {
