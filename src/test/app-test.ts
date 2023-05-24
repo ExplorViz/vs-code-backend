@@ -32,6 +32,27 @@ describe("Server ...", () => {
     }
   });
 
+  it("should not allow to join custom room if there is no frontend with that name connected", (done) => {
+    // include unnecessary socketId and room for easier testing of equality
+
+    const idePayload = {
+      roomId: "room-does-not-exist",
+    };
+
+    // One room due to default room (each socket automatically joins a room identified by its own id.)
+    clientSocket.emit("join-custom-room", idePayload, (payload: unknown) => {
+      assert.equal(
+        io.sockets.adapter.rooms.size,
+        1,
+        "Wrong number of rooms in initial room setup."
+      );
+
+      assert.equal(payload, null, "Payload contains data, but shouldn't");
+
+      done();
+    });
+  });
+
   it("should save user info from frontend and correctly handle initial room setup", (done) => {
     assert.equal(userInfoMap.size, 0, "UserInfoMap should be empty");
 

@@ -70,6 +70,13 @@ export function setupServer(port?: number) {
       "join-custom-room",
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (data: RoomJoinPayload, callback: any) => {
+        if (!io.sockets.adapter.rooms.get(data.roomId + ":frontend")) {
+          if (callback) {
+            callback();
+            return;
+          }
+        }
+
         const roomSubChannel = "ide";
         const roomToJoin = data.roomId + ":" + roomSubChannel;
         socket.join(roomToJoin);
@@ -77,6 +84,9 @@ export function setupServer(port?: number) {
         if (callback) {
           callback(roomToJoin);
         }
+
+        // send event to frontend, so that frontend knows that new ide joined
+        // that needs data
 
         const room = getRoomWithSubchannelForSocketId(socket.id);
         if (room) {
@@ -106,6 +116,9 @@ export function setupServer(port?: number) {
       (data: UserInfoInitPayload, callback: any) => {
         const foundUserId = userInfoMap.get(data.userId);
         const roomSubChannel = "frontend";
+
+        let roomResponse = "";
+
         if (!foundUserId) {
           logger.trace(
             {
@@ -137,9 +150,7 @@ export function setupServer(port?: number) {
             socketId: socket.id,
           };
           userInfoMap.set(data.userId, newUserInfo);
-          if (callback) {
-            callback(uniqueRoomName);
-          }
+          roomResponse = uniqueRoomName;
         } else {
           const { room } = foundUserId;
 
@@ -158,9 +169,10 @@ export function setupServer(port?: number) {
           );
 
           userInfoMap.set(data.userId, updatedUserInfo);
-          if (callback) {
-            callback(room);
-          }
+          roomResponse = room;
+        }
+        if (callback && roomResponse.length > 0) {
+          callback(roomResponse);
         }
       }
     );
