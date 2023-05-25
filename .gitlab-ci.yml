@@ -63,6 +63,14 @@ deploy-dockerhub-dev:
       variables:
         DOCKERHUB_TAG: 'dev'
 
+deploy-dockerhub-dev-mr:
+  extends:
+    - .deploy-to-dockerhub
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_PIPELINE_SOURCE != "schedule" && $CI_COMMIT_BRANCH == "dev"'
+      variables:
+        DOCKERHUB_TAG: 'dev-mr-$CI_COMMIT_SHORT_SHA'
+
 retag-dockerhub-image:
   stage: deploy:retagging
   tags:
