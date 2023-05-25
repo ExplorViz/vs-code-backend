@@ -67,7 +67,7 @@ deploy-dockerhub-dev-mr:
   extends:
     - .deploy-to-dockerhub
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
       variables:
         DOCKERHUB_TAG: 'dev-mr-$CI_COMMIT_SHORT_SHA'
 
