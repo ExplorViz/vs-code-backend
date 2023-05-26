@@ -1,0 +1,5 @@
+services:
+  vs-code-backend:
+    image: explorviz/vs-code-backend
+    ports:
+      - "3000:3000"
