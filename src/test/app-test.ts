@@ -1,7 +1,7 @@
 import Client, { Socket } from "socket.io-client";
 import { assert } from "chai";
 import { server, io, userInfoMap, setupServer } from "../app";
-import { IDEApiActions, IDEApiDest } from "../types";
+import { IDEApiActions, IDEApiDest, TextSelection } from "../types";
 
 describe("Server ...", () => {
   let clientSocket: Socket;
@@ -436,6 +436,106 @@ describe("Server ...", () => {
 
         clientSocket2.emit("join-custom-room", idePayload, () => {
           clientSocket.emit(IDEApiDest.IDEDo, testPayload);
+        });
+      });
+    });
+  });
+
+  it("should broadcast text selection event with payload to all clients of the same room, except the sender IDE.", (done) => {
+    clientSocket2 = createNewClient();
+    const clientSocket3 = createNewClient();
+
+    clientSocket2.on("connect", () => {
+      clientSocket3.on("connect", () => {
+        const newUserInfo = {
+          userId: "123",
+        };
+
+        const idePayload = {
+          roomId: "change-in-test",
+        };
+
+        const textSelectionPayload: TextSelection = {
+          documentUri: "testUri",
+          startLine: 0,
+          startCharPos: 1,
+          endLine: 2,
+          endCharPos: 3,
+        };
+
+        clientSocket3.on("receive-text-selection", () => {
+          clientSocket3.close();
+          assert.fail("Sender socket received text selection event.");
+        });
+
+        clientSocket2.on("receive-text-selection", (data: TextSelection) => {
+          assert.equal(
+            JSON.stringify(data),
+            JSON.stringify(textSelectionPayload),
+            "Broadcasted text selection event is not correct."
+          );
+          clientSocket3.close();
+          done();
+        });
+
+        clientSocket.emit("update-user-info", newUserInfo, (room: string) => {
+          idePayload.roomId = room;
+
+          clientSocket2.emit("join-custom-room", idePayload, () => {
+            clientSocket3.emit("join-custom-room", idePayload, () => {
+              clientSocket3.emit(
+                "broadcast-text-selection",
+                textSelectionPayload
+              );
+            });
+          });
+        });
+      });
+    });
+  });
+
+  it("should broadcast text selection event with empty payload to all clients of the same room, except the sender IDE.", (done) => {
+    clientSocket2 = createNewClient();
+    const clientSocket3 = createNewClient();
+
+    clientSocket2.on("connect", () => {
+      clientSocket3.on("connect", () => {
+        const newUserInfo = {
+          userId: "123",
+        };
+
+        const idePayload = {
+          roomId: "change-in-test",
+        };
+
+        const textSelectionPayload: TextSelection = null;
+
+        clientSocket3.on("receive-text-selection", () => {
+          clientSocket3.close();
+          assert.fail("Sender socket received text selection event.");
+        });
+
+        clientSocket2.on("receive-text-selection", (data: TextSelection) => {
+          assert.equal(
+            data,
+            textSelectionPayload,
+            "Broadcasted empty text selection event is not correct."
+          );
+          clientSocket3.close();
+          done();
+        });
+
+        clientSocket.emit("update-user-info", newUserInfo, (room: string) => {
+          idePayload.roomId = room;
+
+          clientSocket2.emit("join-custom-room", idePayload, () => {
+            clientSocket3.emit("join-custom-room", idePayload, () => {
+              clientSocket3.emit(
+                "broadcast-text-selection",
+                textSelectionPayload
+              );
+            });
+          });
         });
       });
     });

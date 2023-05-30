@@ -8,6 +8,7 @@ import {
   UserInfo,
   UserInfoInitPayload,
   RoomJoinPayload,
+  TextSelection,
 } from "./types";
 import logger from "./logger";
 import * as util from "util";
@@ -65,6 +66,33 @@ export function setupServer(port?: number) {
 
   io.on("connection", (socket) => {
     logger.trace(`Socket ${socket.id} connected.`);
+
+    socket.on(
+      "broadcast-text-selection",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (data: TextSelection, callback: any) => {
+        const room = getRoomWithSubchannelForSocketId(socket.id);
+
+        if (room) {
+          socket.broadcast.to(room).emit("receive-text-selection", data);
+          if (callback) {
+            callback(true);
+          }
+        } else {
+          if (callback) {
+            callback(true);
+          }
+        }
+
+        /* if(room) {
+          io.in("room1").fetchSockets().then((sockets) => {
+            sockets.forEach((socket) => {
+              if(socket.id.)
+            });
+          });
+        }*/
+      }
+    );
 
     socket.on(
       "join-custom-room",

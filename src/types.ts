@@ -13,6 +13,14 @@ export enum IDEApiActions {
   JumpToMonitoringClass = "jumpToMonitoringClass",
 }
 
+export type TextSelection = {
+  documentUri: string;
+  startLine: number;
+  startCharPos: number;
+  endLine: number;
+  endCharPos: number;
+} | null;
+
 export type RoomJoinPayload = {
   roomId: string;
 };
