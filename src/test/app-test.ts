@@ -462,7 +462,18 @@ describe("Server ...", () => {
     );
   });
 
-  it("should broadcast emptytext selection event with payload to all clients of the same room, except the sender IDE.", (done) => {
+  it("should NOT allow to implicitly create / join unknown pair programming room via join-event.", (done) => {
+    clientSocket.emit(
+      "join-pair-programming-room",
+      "nothing-is-here-there-is-no-room",
+      (returnValue: boolean) => {
+        assert.equal(returnValue, null);
+        done();
+      }
+    );
+  });
+
+  it("should broadcast text selection event with payload to all clients of the same room, except the sender IDE.", (done) => {
     clientSocket2 = createNewClient();
     const clientSocket3 = createNewClient();
 
@@ -489,14 +500,35 @@ describe("Server ...", () => {
         });
 
         clientSocket.emit("create-pair-programming-room", (room: string) => {
-          clientSocket2.emit("join-pair-programming-room", room, () => {
-            clientSocket3.emit("join-pair-programming-room", room, () => {
-              clientSocket3.emit(
-                "broadcast-text-selection",
-                textSelectionPayload
+          clientSocket2.emit(
+            "join-pair-programming-room",
+            room,
+            (returnValue: string) => {
+              assert.ok(
+                returnValue,
+                "Return with value " +
+                  returnValue +
+                  " is not expected. Should be a message for a user that states successful room join"
               );
-            });
-          });
+              clientSocket3.emit(
+                "join-pair-programming-room",
+                room,
+                (returnValue2: string) => {
+                  assert.ok(
+                    returnValue2,
+                    "Return with value " + returnValue2 + " is not expected"
+                  );
+                  clientSocket3.emit(
+                    "broadcast-text-selection",
+                    textSelectionPayload,
+                    (returnValue: boolean) => {
+                      assert.isTrue(returnValue);
+                    }
+                  );
+                }
+              );
+            }
+          );
         });
       });
     });

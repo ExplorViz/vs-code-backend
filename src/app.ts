@@ -82,7 +82,7 @@ export function setupServer(port?: number) {
         );
 
         if (callback) {
-          callback(`Joined room ${uniqueRoomName}.`);
+          callback(uniqueRoomName);
         }
       }
     );
@@ -91,11 +91,12 @@ export function setupServer(port?: number) {
       "join-pair-programming-room",
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (roomName: string, callback: any) => {
-        if (doesRoomExist(roomName)) {
-          socket.join(roomName);
+        const roomSubChannel = "pairprogramming";
+        if (doesRoomExist(roomName + ":" + roomSubChannel)) {
+          socket.join(roomName + ":" + roomSubChannel);
           logger.debug(`Socket ${socket.id} joined PP room ${roomName}.`);
           if (callback) {
-            callback(`Joined room ${roomName}.`);
+            callback(roomName);
           }
         } else {
           if (callback) {
@@ -282,9 +283,7 @@ export function setupServer(port?: number) {
 }
 
 function doesRoomExist(roomName: string): boolean {
-  return (
-    io.sockets.adapter.rooms.get(roomName + ":pairprogramming") != undefined
-  );
+  return io.sockets.adapter.rooms.get(roomName) != undefined;
 }
 
 function getPairProgrammingRoomSubchannelForSocketId(socketId: string) {
