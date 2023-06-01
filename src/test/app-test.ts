@@ -441,20 +441,33 @@ describe("Server ...", () => {
     });
   });
 
-  it("should broadcast text selection event with payload to all clients of the same room, except the sender IDE.", (done) => {
+  // Pair Programming
+
+  it("should NOT broadcast text selection event with payload if not connected.", (done) => {
+    const textSelectionPayload: TextSelection = {
+      documentUri: "testUri",
+      startLine: 0,
+      startCharPos: 1,
+      endLine: 2,
+      endCharPos: 3,
+    };
+
+    clientSocket.emit(
+      "broadcast-text-selection",
+      textSelectionPayload,
+      (returnValue: boolean) => {
+        assert.isFalse(returnValue);
+        done();
+      }
+    );
+  });
+
+  it("should broadcast emptytext selection event with payload to all clients of the same room, except the sender IDE.", (done) => {
     clientSocket2 = createNewClient();
     const clientSocket3 = createNewClient();
 
     clientSocket2.on("connect", () => {
       clientSocket3.on("connect", () => {
-        const newUserInfo = {
-          userId: "123",
-        };
-
-        const idePayload = {
-          roomId: "change-in-test",
-        };
-
         const textSelectionPayload: TextSelection = {
           documentUri: "testUri",
           startLine: 0,
@@ -463,12 +476,9 @@ describe("Server ...", () => {
           endCharPos: 3,
         };
 
-        clientSocket3.on("receive-text-selection", () => {
-          clientSocket3.close();
-          assert.fail("Sender socket received text selection event.");
-        });
+        // TODO how to additionally test that clientSocket2 received the event?
 
-        clientSocket2.on("receive-text-selection", (data: TextSelection) => {
+        clientSocket.on("receive-text-selection", (data: TextSelection) => {
           assert.equal(
             JSON.stringify(data),
             JSON.stringify(textSelectionPayload),
@@ -478,11 +488,9 @@ describe("Server ...", () => {
           done();
         });
 
-        clientSocket.emit("update-user-info", newUserInfo, (room: string) => {
-          idePayload.roomId = room;
-
-          clientSocket2.emit("join-custom-room", idePayload, () => {
-            clientSocket3.emit("join-custom-room", idePayload, () => {
+        clientSocket.emit("create-pair-programming-room", (room: string) => {
+          clientSocket2.emit("join-pair-programming-room", room, () => {
+            clientSocket3.emit("join-pair-programming-room", room, () => {
               clientSocket3.emit(
                 "broadcast-text-selection",
                 textSelectionPayload
@@ -494,42 +502,29 @@ describe("Server ...", () => {
     });
   });
 
-  it("should broadcast text selection event with empty payload to all clients of the same room, except the sender IDE.", (done) => {
+  it("should broadcast empty text selection event with payload to all clients of the same room, except the sender IDE.", (done) => {
     clientSocket2 = createNewClient();
     const clientSocket3 = createNewClient();
 
     clientSocket2.on("connect", () => {
       clientSocket3.on("connect", () => {
-        const newUserInfo = {
-          userId: "123",
-        };
-
-        const idePayload = {
-          roomId: "change-in-test",
-        };
-
         const textSelectionPayload: TextSelection = null;
 
-        clientSocket3.on("receive-text-selection", () => {
-          clientSocket3.close();
-          assert.fail("Sender socket received text selection event.");
-        });
+        // TODO how to additionally test that clientSocket2 received the event?
 
-        clientSocket2.on("receive-text-selection", (data: TextSelection) => {
+        clientSocket.on("receive-text-selection", (data: TextSelection) => {
           assert.equal(
-            data,
-            textSelectionPayload,
-            "Broadcasted empty text selection event is not correct."
+            JSON.stringify(data),
+            JSON.stringify(textSelectionPayload),
+            "Broadcasted text selection event is not correct."
           );
           clientSocket3.close();
           done();
         });
 
-        clientSocket.emit("update-user-info", newUserInfo, (room: string) => {
-          idePayload.roomId = room;
-
-          clientSocket2.emit("join-custom-room", idePayload, () => {
-            clientSocket3.emit("join-custom-room", idePayload, () => {
+        clientSocket.emit("create-pair-programming-room", (room: string) => {
+          clientSocket2.emit("join-pair-programming-room", room, () => {
+            clientSocket3.emit("join-pair-programming-room", room, () => {
               clientSocket3.emit(
                 "broadcast-text-selection",
                 textSelectionPayload

@@ -68,10 +68,48 @@ export function setupServer(port?: number) {
     logger.trace(`Socket ${socket.id} connected.`);
 
     socket.on(
+      "create-pair-programming-room",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (callback: any) => {
+        const roomSubChannel = "pairprogramming";
+
+        const uniqueRoomName = uniqueNamesGenerator(customNamesGeneratorConfig);
+
+        socket.join(uniqueRoomName + ":" + roomSubChannel);
+
+        logger.debug(
+          `Socket ${socket.id} created and joined PP room ${uniqueRoomName}.`
+        );
+
+        if (callback) {
+          callback(`Joined room ${uniqueRoomName}.`);
+        }
+      }
+    );
+
+    socket.on(
+      "join-pair-programming-room",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (roomName: string, callback: any) => {
+        if (doesRoomExist(roomName)) {
+          socket.join(roomName);
+          logger.debug(`Socket ${socket.id} joined PP room ${roomName}.`);
+          if (callback) {
+            callback(`Joined room ${roomName}.`);
+          }
+        } else {
+          if (callback) {
+            callback();
+          }
+        }
+      }
+    );
+
+    socket.on(
       "broadcast-text-selection",
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (data: TextSelection, callback: any) => {
-        const room = getRoomWithSubchannelForSocketId(socket.id);
+        const room = getPairProgrammingRoomSubchannelForSocketId(socket.id);
 
         if (room) {
           socket.broadcast.to(room).emit("receive-text-selection", data);
@@ -80,7 +118,7 @@ export function setupServer(port?: number) {
           }
         } else {
           if (callback) {
-            callback(true);
+            callback(false);
           }
         }
 
@@ -241,6 +279,34 @@ export function setupServer(port?: number) {
   server.listen(port, "0.0.0.0", () => {
     logger.debug(`VS Code backend listening on port ${port}`);
   });
+}
+
+function doesRoomExist(roomName: string): boolean {
+  return (
+    io.sockets.adapter.rooms.get(roomName + ":pairprogramming") != undefined
+  );
+}
+
+function getPairProgrammingRoomSubchannelForSocketId(socketId: string) {
+  let room = "";
+
+  const roomSet = io.sockets.adapter.sids.get(socketId)?.values();
+
+  if (!roomSet) {
+    logger.error(
+      `Room set for Socket ${socketId} is undefined, but shouldn't be. Event will not be emitted.`
+    );
+    return;
+  }
+
+  for (const roomName of roomSet) {
+    if (roomName.includes(":pairprogramming")) {
+      room = roomName;
+      break;
+    }
+  }
+
+  return room;
 }
 
 function getRoomWithSubchannelForSocketId(socketId: string) {
