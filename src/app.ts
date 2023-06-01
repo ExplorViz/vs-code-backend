@@ -68,19 +68,60 @@ export function setupServer(port?: number) {
     logger.trace(`Socket ${socket.id} connected.`);
 
     socket.on(
+      "create-pair-programming-room",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (callback: any) => {
+        const roomSubChannel = "pairprogramming";
+
+        const uniqueRoomName = uniqueNamesGenerator(customNamesGeneratorConfig);
+
+        socket.join(uniqueRoomName + ":" + roomSubChannel);
+
+        logger.debug(
+          `Socket ${socket.id} created and joined PP room ${uniqueRoomName}.`
+        );
+
+        if (callback) {
+          callback(uniqueRoomName);
+        }
+      }
+    );
+
+    socket.on(
+      "join-pair-programming-room",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (roomName: string, callback: any) => {
+        const roomSubChannel = "pairprogramming";
+        if (doesRoomExist(roomName + ":" + roomSubChannel)) {
+          socket.join(roomName + ":" + roomSubChannel);
+          logger.debug(`Socket ${socket.id} joined PP room ${roomName}.`);
+
+          if (callback) {
+            callback(roomName);
+          }
+        } else {
+          if (callback) {
+            callback();
+          }
+        }
+      }
+    );
+
+    socket.on(
       "broadcast-text-selection",
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (data: TextSelection, callback: any) => {
-        const room = getRoomWithSubchannelForSocketId(socket.id);
+        const room = getPairProgrammingRoomSubchannelForSocketId(socket.id);
 
         if (room) {
           socket.broadcast.to(room).emit("receive-text-selection", data);
+
           if (callback) {
             callback(true);
           }
         } else {
           if (callback) {
-            callback(true);
+            callback(false);
           }
         }
 
@@ -110,7 +151,7 @@ export function setupServer(port?: number) {
         socket.join(roomToJoin);
 
         if (callback) {
-          callback(roomToJoin);
+          callback(data.roomId);
         }
 
         // send event to frontend, so that frontend knows that new ide joined
@@ -206,8 +247,6 @@ export function setupServer(port?: number) {
     );
 
     socket.on(IDEApiDest.VizDo, (data: IDEApiCall) => {
-      logger.debug({ event: data }, "vizDo");
-
       const room = getRoomWithSubchannelForSocketId(socket.id);
       if (room) {
         const oppositeRoom =
@@ -243,11 +282,39 @@ export function setupServer(port?: number) {
   });
 }
 
+function doesRoomExist(roomName: string): boolean {
+  return io.sockets.adapter.rooms.get(roomName) != undefined;
+}
+
+function getPairProgrammingRoomSubchannelForSocketId(socketId: string) {
+  let room = "";
+
+  const roomSet = io.sockets.adapter.sids.get(socketId)?.values();
+
+  /* istanbul ignore next */
+  if (!roomSet) {
+    logger.error(
+      `Room set for Socket ${socketId} is undefined, but shouldn't be. Event will not be emitted.`
+    );
+    return;
+  }
+
+  for (const roomName of roomSet) {
+    if (roomName.includes(":pairprogramming")) {
+      room = roomName;
+      break;
+    }
+  }
+
+  return room;
+}
+
 function getRoomWithSubchannelForSocketId(socketId: string) {
   let room = "";
 
   const roomSet = io.sockets.adapter.sids.get(socketId)?.values();
 
+  /* istanbul ignore next */
   if (!roomSet) {
     logger.error(
       `Room set for Socket ${socketId} is undefined, but shouldn't be. Event will not be emitted.`
@@ -275,6 +342,7 @@ function getOppositeRoomWithSubchannelForGivenRoomName(
 
     return oppositeRoom;
   } else {
+    /* istanbul ignore next */
     return;
   }
 }
