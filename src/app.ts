@@ -95,6 +95,7 @@ export function setupServer(port?: number) {
         if (doesRoomExist(roomName + ":" + roomSubChannel)) {
           socket.join(roomName + ":" + roomSubChannel);
           logger.debug(`Socket ${socket.id} joined PP room ${roomName}.`);
+
           if (callback) {
             callback(roomName);
           }
@@ -114,6 +115,7 @@ export function setupServer(port?: number) {
 
         if (room) {
           socket.broadcast.to(room).emit("receive-text-selection", data);
+
           if (callback) {
             callback(true);
           }
@@ -149,7 +151,7 @@ export function setupServer(port?: number) {
         socket.join(roomToJoin);
 
         if (callback) {
-          callback(roomToJoin);
+          callback(data.roomId);
         }
 
         // send event to frontend, so that frontend knows that new ide joined
@@ -245,8 +247,6 @@ export function setupServer(port?: number) {
     );
 
     socket.on(IDEApiDest.VizDo, (data: IDEApiCall) => {
-      logger.debug({ event: data }, "vizDo");
-
       const room = getRoomWithSubchannelForSocketId(socket.id);
       if (room) {
         const oppositeRoom =
@@ -291,6 +291,7 @@ function getPairProgrammingRoomSubchannelForSocketId(socketId: string) {
 
   const roomSet = io.sockets.adapter.sids.get(socketId)?.values();
 
+  /* istanbul ignore next */
   if (!roomSet) {
     logger.error(
       `Room set for Socket ${socketId} is undefined, but shouldn't be. Event will not be emitted.`
@@ -313,6 +314,7 @@ function getRoomWithSubchannelForSocketId(socketId: string) {
 
   const roomSet = io.sockets.adapter.sids.get(socketId)?.values();
 
+  /* istanbul ignore next */
   if (!roomSet) {
     logger.error(
       `Room set for Socket ${socketId} is undefined, but shouldn't be. Event will not be emitted.`
@@ -340,6 +342,7 @@ function getOppositeRoomWithSubchannelForGivenRoomName(
 
     return oppositeRoom;
   } else {
+    /* istanbul ignore next */
     return;
   }
 }

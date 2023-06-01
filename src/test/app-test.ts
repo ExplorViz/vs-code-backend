@@ -1,7 +1,7 @@
 import Client, { Socket } from "socket.io-client";
 import { assert } from "chai";
 import { server, io, userInfoMap, setupServer } from "../app";
-import { IDEApiActions, IDEApiDest, TextSelection } from "../types";
+import { IDEApiActions, IDEApiCall, IDEApiDest, TextSelection } from "../types";
 
 describe("Server ...", () => {
   let clientSocket: Socket;
@@ -357,6 +357,58 @@ describe("Server ...", () => {
     });
   });
 
+  it("should emit IDE event to frontend subchannel of room.", (done) => {
+    clientSocket2 = createNewClient();
+
+    clientSocket2.on("connect", () => {
+      const newUserInfo = {
+        userId: "123",
+      };
+
+      const idePayload = {
+        roomId: "change-in-test",
+      };
+
+      const expectedData: IDEApiCall = {
+        action: IDEApiActions.GetVizData,
+        data: [],
+        foundationCommunicationLinks: [],
+        fqn: "testfqn",
+        meshId: "testmeshid",
+        occurrenceID: -1,
+      };
+
+      let messagesToSkip = 1;
+
+      clientSocket.on(IDEApiDest.VizDo, (data) => {
+        if (messagesToSkip == 0) {
+          assert.equal(
+            JSON.stringify(data),
+            JSON.stringify(expectedData),
+            "Sent data is not correct."
+          );
+          done();
+        } else {
+          // skip first message, since this will be the initial-payload event
+          messagesToSkip -= 1;
+        }
+      });
+
+      clientSocket.emit("update-user-info", newUserInfo, (room: string) => {
+        idePayload.roomId = room;
+
+        clientSocket2.emit(
+          "join-custom-room",
+          idePayload,
+          (joinedRoomName: string) => {
+            assert.equal(room, joinedRoomName);
+            clientSocket2.emit(IDEApiDest.VizDo, expectedData);
+          }
+        );
+      });
+    });
+  });
+
   it("should emit events to ide subchannel of room when initiated by frontend subchannel of same room.", (done) => {
     clientSocket2 = createNewClient();
 
@@ -500,6 +552,7 @@ describe("Server ...", () => {
         });
 
         clientSocket.emit("create-pair-programming-room", (room: string) => {
+          assert.isOk(room);
           clientSocket2.emit(
             "join-pair-programming-room",
             room,
