@@ -92,7 +92,10 @@ export function setupServer(port?: number) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (roomName: string, callback: any) => {
         const roomSubChannel = "pairprogramming";
-        if (doesRoomExist(roomName + ":" + roomSubChannel)) {
+        if (
+          process.env.EXPERIMENT_MODE == "true" ||
+          doesRoomExist(roomName + ":" + roomSubChannel)
+        ) {
           socket.join(roomName + ":" + roomSubChannel);
           logger.debug(`Socket ${socket.id} joined PP room ${roomName}.`);
 
