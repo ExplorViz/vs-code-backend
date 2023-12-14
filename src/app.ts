@@ -27,10 +27,16 @@ const customNamesGeneratorConfig: Config = {
   length: 3,
 };
 
+// Needing some custom data to be stored in a socket.
+// TODO: Does every socket has its own data?
+interface SocketData {
+  roomName: string | undefined;
+}
+
 const backend = express();
 let server: http.Server;
 const maxHttpBufferSize = 1e8;
-let io: Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, unknown>;
+let io: Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>;
 
 const defaultPort = 3000;
 
@@ -77,7 +83,9 @@ export function setupServer(port?: number) {
 
         const uniqueRoomName = uniqueNamesGenerator(customNamesGeneratorConfig);
 
-        socket.join(uniqueRoomName + ":" + roomSubChannel);
+        const roomName = uniqueRoomName + ":" + roomSubChannel;
+        socket.data.roomName = roomName;
+        socket.join(roomName);
 
         logger.debug(
           `Socket ${socket.id} created and joined PP room ${uniqueRoomName}.`
@@ -153,6 +161,7 @@ export function setupServer(port?: number) {
 
         const roomSubChannel = "ide";
         const roomToJoin = data.roomId + ":" + roomSubChannel;
+        socket.data.roomName = roomToJoin;
         socket.join(roomToJoin);
 
         if (callback) {
@@ -205,7 +214,9 @@ export function setupServer(port?: number) {
             customNamesGeneratorConfig
           );
 
-          socket.join(uniqueRoomName + ":" + roomSubChannel);
+          const roomName = uniqueRoomName + ":" + roomSubChannel;
+          socket.data.roomName = roomName;
+          socket.join(roomName);
 
           logger.debug(
             `Socket ${socket.id} with username ${data.userId} joined room ${
@@ -234,7 +245,9 @@ export function setupServer(port?: number) {
             socketId: socket.id,
           };
 
-          socket.join(room + ":" + roomSubChannel);
+          const roomName = room + ":" + roomSubChannel;
+          socket.data.roomName = roomName;
+          socket.join(roomName);
 
           logger.debug(
             `Socket ${socket.id} with username ${data.userId} re-joined room ${
@@ -273,8 +286,7 @@ export function setupServer(port?: number) {
       );
 
       // NOTE: The socket.id gets removed from the adapter.sids after the 'disconnect'-event was handled!
-      // TODO: How to get the room name before that?
-      const room = getRoomWithSubchannelForSocketId(socket.id);
+      const room = socket.data.roomName; 
       if (room) {
         const oppositeRoom =
           getOppositeRoomWithSubchannelForGivenRoomName(room);
