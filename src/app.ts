@@ -58,6 +58,8 @@ export function setupServer(port?: number) {
       origin: "*",
       methods: ["GET", "POST"],
     },
+    // If no 'pong' is received, the 'disconnect'-event is triggered.
+    pingInterval: 5000,
   });
 
   logger.debug(
@@ -260,6 +262,53 @@ export function setupServer(port?: number) {
             `Send event ${data.action} from ${room} to ${oppositeRoom}`
           );
           socket.to(oppositeRoom).emit(IDEApiDest.VizDo, data);
+        }
+      }
+    });
+
+    // Handle the case a client (unexpectedly) closes:
+    socket.on('disconnect', (reason) => {
+      logger.debug(
+        "Socket " + socket.id + ': ' + reason
+      );
+
+      // NOTE: The socket.id gets removed from the adapter.sids after the 'disconnect'-event was handled!
+      // TODO: How to get the room name before that?
+      const room = getRoomWithSubchannelForSocketId(socket.id);
+      if (room) {
+        const oppositeRoom =
+          getOppositeRoomWithSubchannelForGivenRoomName(room);
+
+        if (oppositeRoom) {
+          logger.debug(
+            `A client from ${room} has closed the connection to ${oppositeRoom}`
+          );
+
+          // Has a frontend or an IDE closed?
+          if (room.includes(":ide")) {
+            socket.to(oppositeRoom).emit(IDEApiDest.VizDo, {
+              action: IDEApiActions.DisconnectIDE,
+              data: [],
+              meshId: '',
+              fqn: '',
+              occurrenceID: -1,
+              foundationCommunicationLinks: '',
+            });
+
+          } else if (room.includes(":frontend")) {
+            socket.to(oppositeRoom).emit(IDEApiDest.IDEDo, {
+              action: IDEApiActions.DisconnectFrontend,
+              data: [],
+              meshId: '',
+              fqn: '',
+              occurrenceID: -1,
+              foundationCommunicationLinks: '',
+            });
+          } else {
+            logger.debug('Connect_Error: Wrong room name ${room}.');
+          }
+        } else {
+          logger.debug('No room found for socket ${socket.id}.');
         }
       }
     });

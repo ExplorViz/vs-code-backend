@@ -11,6 +11,8 @@ export enum IDEApiActions {
   GetVizData = "getVizData",
   JumpToLocation = "jumpToLocation",
   JumpToMonitoringClass = "jumpToMonitoringClass",
+  DisconnectFrontend = 'disconnectFrontend',
+  DisconnectIDE = 'disconnectIDE',
 }
 
 export type TextSelection = {
