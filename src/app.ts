@@ -27,10 +27,16 @@ const customNamesGeneratorConfig: Config = {
   length: 3,
 };
 
+// Needing some custom data to be stored in a socket.
+// TODO: Does every socket has its own data?
+interface SocketData {
+  roomName: string | undefined;
+}
+
 const backend = express();
 let server: http.Server;
 const maxHttpBufferSize = 1e8;
-let io: Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, unknown>;
+let io: Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>;
 
 const defaultPort = 3000;
 
@@ -58,6 +64,8 @@ export function setupServer(port?: number) {
       origin: "*",
       methods: ["GET", "POST"],
     },
+    // If no 'pong' is received, the 'disconnect'-event is triggered.
+    pingInterval: 5000,
   });
 
   logger.debug(
@@ -75,7 +83,9 @@ export function setupServer(port?: number) {
 
         const uniqueRoomName = uniqueNamesGenerator(customNamesGeneratorConfig);
 
-        socket.join(uniqueRoomName + ":" + roomSubChannel);
+        const roomName = uniqueRoomName + ":" + roomSubChannel;
+        socket.data.roomName = roomName;
+        socket.join(roomName);
 
         logger.debug(
           `Socket ${socket.id} created and joined PP room ${uniqueRoomName}.`
@@ -151,6 +161,7 @@ export function setupServer(port?: number) {
 
         const roomSubChannel = "ide";
         const roomToJoin = data.roomId + ":" + roomSubChannel;
+        socket.data.roomName = roomToJoin;
         socket.join(roomToJoin);
 
         if (callback) {
@@ -203,7 +214,9 @@ export function setupServer(port?: number) {
             customNamesGeneratorConfig
           );
 
-          socket.join(uniqueRoomName + ":" + roomSubChannel);
+          const roomName = uniqueRoomName + ":" + roomSubChannel;
+          socket.data.roomName = roomName;
+          socket.join(roomName);
 
           logger.debug(
             `Socket ${socket.id} with username ${data.userId} joined room ${
@@ -232,7 +245,9 @@ export function setupServer(port?: number) {
             socketId: socket.id,
           };
 
-          socket.join(room + ":" + roomSubChannel);
+          const roomName = room + ":" + roomSubChannel;
+          socket.data.roomName = roomName;
+          socket.join(roomName);
 
           logger.debug(
             `Socket ${socket.id} with username ${data.userId} re-joined room ${
@@ -260,6 +275,52 @@ export function setupServer(port?: number) {
             `Send event ${data.action} from ${room} to ${oppositeRoom}`
           );
           socket.to(oppositeRoom).emit(IDEApiDest.VizDo, data);
+        }
+      }
+    });
+
+    // Handle the case a client (unexpectedly) closes:
+    socket.on('disconnect', (reason) => {
+      logger.debug(
+        "Socket " + socket.id + ': ' + reason
+      );
+
+      // NOTE: The socket.id gets removed from the adapter.sids after the 'disconnect'-event was handled!
+      const room = socket.data.roomName; 
+      if (room) {
+        const oppositeRoom =
+          getOppositeRoomWithSubchannelForGivenRoomName(room);
+
+        if (oppositeRoom) {
+          logger.debug(
+            `A client from ${room} has closed the connection to ${oppositeRoom}`
+          );
+
+          // Has a frontend or an IDE closed?
+          if (room.includes(":ide")) {
+            socket.to(oppositeRoom).emit(IDEApiDest.VizDo, {
+              action: IDEApiActions.DisconnectIDE,
+              data: [],
+              meshId: '',
+              fqn: '',
+              occurrenceID: -1,
+              foundationCommunicationLinks: '',
+            });
+
+          } else if (room.includes(":frontend")) {
+            socket.to(oppositeRoom).emit(IDEApiDest.IDEDo, {
+              action: IDEApiActions.DisconnectFrontend,
+              data: [],
+              meshId: '',
+              fqn: '',
+              occurrenceID: -1,
+              foundationCommunicationLinks: '',
+            });
+          } else {
+            logger.debug('Connect_Error: Wrong room name ${room}.');
+          }
+        } else {
+          logger.debug('No room found for socket ${socket.id}.');
         }
       }
     });
