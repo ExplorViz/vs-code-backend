@@ -1,7 +1,7 @@
 {
   "name": "vs-code-backend",
   "version": "1.0.0",
-  "description": "backend for a explorviz vscode extension",
+  "description": "Backend for a explorviz vscode extension",
   "main": "dist/app.js",
   "scripts": {
     "dev": "nodemon src/*",
