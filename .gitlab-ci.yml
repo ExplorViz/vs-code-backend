@@ -1,5 +1,9 @@
 image: node:20-slim
 
+include:
+  - project: 'ExplorViz/code/deployment'
+    file: '.gitlab-ci-docker-manifest.yml'
+
 cache:
   paths:
     - node_modules/
@@ -52,29 +56,31 @@ test:
       --dockerfile=$CI_PROJECT_DIR/Dockerfile
       --destination=$DOCKERHUB_ORGANIZATION/$DOCKERHUB_IMAGE_NAME:$DOCKERHUB_TAG
 
-deploy-dockerhub-main:
+deploy-backend-amd64:
   extends:
     - .deploy-to-dockerhub
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_PIPELINE_SOURCE != "schedule" && $CI_COMMIT_BRANCH == "main"'
 
-deploy-dockerhub-mr:
+deploy-backend-arm64:
   extends:
     - .deploy-to-dockerhub
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
-      variables:
-        DOCKERHUB_TAG: "merge-request-$CI_COMMIT_SHORT_SHA"
-
-retag-dockerhub-image:
-  stage: deploy:retagging
   tags:
-    - exec-docker
+    - arm64
   rules:
-    - if: '$CI_PIPELINE_SOURCE != "schedule" && $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
-  image:
-    name: gcr.io/go-containerregistry/crane:debug
-    entrypoint: [""]
-  script:
-    - crane auth login -u $DOCKERHUB_USERNAME -p $DOCKERHUB_PASSWORD "index.docker.io"
-    - crane cp $DOCKERHUB_ORGANIZATION/$DOCKERHUB_IMAGE_NAME:$DOCKERHUB_TAG $DOCKERHUB_ORGANIZATION/$DOCKERHUB_IMAGE_NAME:$CI_COMMIT_SHORT_SHA
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+retag-backend-as-latest:
+  extends: .retag-dockerhub-image
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+  variables:
+    SOURCE_TAG: "amd64"
+    TARGET_TAG: "latest"
+
+publish-multi-arch-backend:
+  extends: .retag-as-multi-arch-dockerhub-image
+  variables:
+    MANIFEST_PLATFORMS: "linux/amd64,linux/arm64/v8"
