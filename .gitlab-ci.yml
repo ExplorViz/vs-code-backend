@@ -14,9 +14,9 @@ stages:
 workflow:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+    - if: "$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS"
       when: never
-    - if: '$CI_COMMIT_BRANCH'
+    - if: "$CI_COMMIT_BRANCH"
 
 linting:
   stage: code-analysis
@@ -40,14 +40,14 @@ test:
   tags:
     - exec-docker
   variables:
-    DOCKERHUB_TAG: 'latest'
+    DOCKERHUB_TAG: "latest"
   image:
     name: gcr.io/kaniko-project/executor:debug
-    entrypoint: ['']
+    entrypoint: [""]
   script:
     - mkdir -p /kaniko/.docker
-    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(echo -n ${DOCKERHUB_USER}:${DOCKERHUB_PASSWORD} | base64)\"}}}" > /kaniko/.docker/config.json
-    - /kaniko/executor --context=$CI_PROJECT_DIR --dockerfile=$CI_PROJECT_DIR/Dockerfile --destination=$DOCKERHUB_ORGA/$DOCKERHUB_IMAGE_NAME:$DOCKERHUB_TAG
+    - echo "{\"auths\":{\"$CONTAINER_REGISTRY_URL\":{\"auth\":\"$(echo -n ${DOCKERHUB_USERNAME}:${DOCKERHUB_PASSWORD} | base64)\"}}}" > /kaniko/.docker/config.json
+    - /kaniko/executor --context=$CI_PROJECT_DIR --dockerfile=$CI_PROJECT_DIR/Dockerfile --destination=$DOCKERHUB_ORGANIZATION/$DOCKERHUB_IMAGE_NAME:$DOCKERHUB_TAG
 
 deploy-dockerhub-main:
   extends:
@@ -61,7 +61,7 @@ deploy-dockerhub-dev:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_PIPELINE_SOURCE != "schedule" && $CI_COMMIT_BRANCH == "dev"'
       variables:
-        DOCKERHUB_TAG: 'dev'
+        DOCKERHUB_TAG: "dev"
 
 deploy-dockerhub-dev-mr:
   extends:
@@ -69,7 +69,7 @@ deploy-dockerhub-dev-mr:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
       variables:
-        DOCKERHUB_TAG: 'dev-mr-$CI_COMMIT_SHORT_SHA'
+        DOCKERHUB_TAG: "dev-mr-$CI_COMMIT_SHORT_SHA"
 
 retag-dockerhub-image:
   stage: deploy:retagging
@@ -79,7 +79,7 @@ retag-dockerhub-image:
     - if: '$CI_PIPELINE_SOURCE != "schedule" && ($CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH == "main") && $CI_PIPELINE_SOURCE == "push"'
   image:
     name: gcr.io/go-containerregistry/crane:debug
-    entrypoint: ['']
+    entrypoint: [""]
   script:
-    - crane auth login -u $DOCKERHUB_USER -p $DOCKERHUB_PASSWORD "index.docker.io"
-    - crane cp $DOCKERHUB_ORGA/$DOCKERHUB_IMAGE_NAME:$DOCKERHUB_TAG $DOCKERHUB_ORGA/$DOCKERHUB_IMAGE_NAME:$CI_COMMIT_SHORT_SHA
+    - crane auth login -u $DOCKERHUB_USERNAME -p $DOCKERHUB_PASSWORD "index.docker.io"
+    - crane cp $DOCKERHUB_ORGANIZATION/$DOCKERHUB_IMAGE_NAME:$DOCKERHUB_TAG $DOCKERHUB_ORGANIZATION/$DOCKERHUB_IMAGE_NAME:$CI_COMMIT_SHORT_SHA
