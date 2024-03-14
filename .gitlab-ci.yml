@@ -57,6 +57,8 @@ test:
       --destination=$DOCKERHUB_ORGANIZATION/$DOCKERHUB_IMAGE_NAME:$DOCKERHUB_TAG
 
 deploy-backend-amd64:
+  variables:
+    DOCKERHUB_TAG: "amd64"
   extends:
     - .deploy-to-dockerhub
   rules:
@@ -65,6 +67,8 @@ deploy-backend-amd64:
     - if: $CI_PIPELINE_SOURCE == "web"
 
 deploy-backend-arm64:
+  variables:
+    DOCKERHUB_TAG: "arm64"
   extends:
     - .deploy-to-dockerhub
   tags:
