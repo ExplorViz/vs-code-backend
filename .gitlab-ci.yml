@@ -80,7 +80,7 @@ deploy-backend-arm64:
 retag-backend-as-latest:
   extends: .retag-dockerhub-image
   rules:
-    - if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "schedule"
+    - if: '$MULTI_ARCH'
       when: never
   variables:
     SOURCE_TAG: "amd64"
@@ -88,5 +88,8 @@ retag-backend-as-latest:
 
 publish-multi-arch-backend:
   extends: .retag-as-multi-arch-dockerhub-image
+  rules:
+    - if: '$MULTI_ARCH == null'
+      when: never
   variables:
     MANIFEST_PLATFORMS: "linux/amd64,linux/arm64/v8"
