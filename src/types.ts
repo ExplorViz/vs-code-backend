@@ -11,7 +11,17 @@ export enum IDEApiActions {
   GetVizData = "getVizData",
   JumpToLocation = "jumpToLocation",
   JumpToMonitoringClass = "jumpToMonitoringClass",
+  DisconnectFrontend = 'disconnectFrontend',
+  DisconnectIDE = 'disconnectIDE',
 }
+
+export type TextSelection = {
+  documentUri: string;
+  startLine: number;
+  startCharPos: number;
+  endLine: number;
+  endCharPos: number;
+} | null;
 
 export type RoomJoinPayload = {
   roomId: string;
