@@ -1,6 +1,8 @@
 import express from "express";
 import { Server } from "socket.io";
 import http from "http";
+import dns from "dns";
+import net from "net";
 import {
   IDEApiActions,
   IDEApiCall,
@@ -38,7 +40,7 @@ let server: http.Server;
 const maxHttpBufferSize = 1e8;
 let io: Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>;
 
-const defaultPort = 3000;
+const defaultPort = 3001;
 
 const socketPath = "/v2/ide/";
 
@@ -339,11 +341,82 @@ export function setupServer(port?: number) {
         }
       }
     });
+
+    socket.on('check-frontend-connection', 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async (data: string, callback: any) => {
+        const frontendHttp = data;
+        logger.debug("check-frontend-connection frontendHttp: " + frontendHttp);
+        const payload = await doesConnectionExist(frontendHttp);
+        if(callback){
+          callback(payload);
+        }
+    });
+
+    socket.on('create-landscape', (callback) => {
+      let payload = undefined;
+      // TODO create landscape
+      socket.emit('create-landscape', (tokenData: {id: string; secret: string;} | undefined) => {
+        payload = tokenData;
+      });
+
+      if (callback) {
+        payload ? callback(payload) : callback();
+      }
+    });
   });
+
 
   server.listen(port, "0.0.0.0", () => {
     logger.debug(`VS Code backend listening on port ${port}`);
   });
+}
+
+
+async function doesConnectionExist(frontendHttp: string) {
+  console.log("doesConnectionExist called with " + frontendHttp);
+  const frontendHttpIpv6Address = getIpv6Address(frontendHttp);
+  logger.debug("resolved ip address: ", frontendHttpIpv6Address);
+  if(!frontendHttpIpv6Address) {
+    return false;
+  }
+  const sockets = await io.fetchSockets();
+  sockets.forEach(socket => {
+    const socketIpv6Address = getIpv6Address(JSON.stringify(socket.handshake.address));
+    logger.debug("resolved socket address: ", socketIpv6Address);
+    if(socketIpv6Address === frontendHttpIpv6Address) 
+      return true;
+  });
+  return false;
+}
+
+function getIpv6Address(input: string): string | undefined {
+  const inputWithoutPort = input.split(':')[0];
+  logger.debug("getIpv6Address of " + inputWithoutPort);
+  if (net.isIPv4(inputWithoutPort))
+    return '::ffff:' + inputWithoutPort;
+    
+  if (net.isIPv6(inputWithoutPort))
+    return inputWithoutPort;
+  
+  try {
+    const url = new URL(inputWithoutPort);
+    const hostname = url.hostname;
+    dns.lookup(hostname, 6, (err, address, ) => {
+      if(err) {
+        logger.debug("Couldn't resolve frontend url to ipv6 address: ", err.message);
+        return;
+      }
+      return address;
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error("Error message:", error.message);
+    } else {
+      console.error("An unknown error occurred");
+    }
+    return;
+  }
 }
 
 function doesRoomExist(roomName: string): boolean {
