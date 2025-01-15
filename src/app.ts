@@ -346,7 +346,6 @@ export function setupServer(port?: number) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async (data: string, callback: any) => {
         const frontendHttp = data;
-        logger.debug("check-frontend-connection frontendHttp: " + frontendHttp);
         const payload = await doesConnectionExist(frontendHttp);
         if(callback){
           callback(payload);
@@ -373,26 +372,39 @@ export function setupServer(port?: number) {
 }
 
 
+// #region Debug Session Helper
+
 async function doesConnectionExist(frontendHttp: string) {
-  console.log("doesConnectionExist called with " + frontendHttp);
   const frontendHttpIpv6Address = await getIpv6Address(frontendHttp);
-  logger.debug("resolved ip address: " + frontendHttpIpv6Address);
-  if(!frontendHttpIpv6Address) {
+  const frontendHttpIpv4Address = await getIpv4Address(frontendHttp);
+  if(!frontendHttpIpv6Address && !frontendHttpIpv4Address) {
+    logger.error("Unable to determine frontend ip address");
     return false;
   }
   const sockets = await io.fetchSockets();
   for (const socket of sockets) {
-    const socketIpv6Address = await getIpv6Address(JSON.stringify(socket.handshake.address));
-    logger.debug("resolved socket address: " + socketIpv6Address);
-    if(socketIpv6Address === frontendHttpIpv6Address) 
+    const socketAddress = socket.handshake.address;
+    const socketClient = socket.handshake.query.client;
+
+    if (socketClient !== 'frontend')
+      continue;
+
+    if (!net.isIPv4(socketAddress) && !net.isIPv6(socketAddress)){
+      logger.error("Socket handshake address is not in IPv4/IPv6 format");
+      continue;
+    }
+
+    if(socketAddress === frontendHttpIpv6Address || socketAddress === frontendHttpIpv4Address){
       return true;
+    }
+  
   }
  
   return false;
 }
 
 async function getIpv6Address(input: string): Promise<string | undefined> {
-  console.error("test error log");
+
   if (net.isIPv4(input))
     return '::ffff:' + input;
 
@@ -420,6 +432,54 @@ async function getIpv6Address(input: string): Promise<string | undefined> {
     return '::ffff:' + address.address;
 
 }
+
+async function getIpv4Address(input: string): Promise<string | undefined> {
+
+  if (net.isIPv4(input))
+    return input;
+
+  if(net.isIPv6(input)){
+    // Check if the IPv6 address has the '::ffff:' prefix indicating it's an IPv6-mapped IPv4 address
+   const regex = /^::ffff:(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/; 
+   const match = input.match(regex);
+
+    if (match) {
+      const ipv4 = `${match[1]}.${match[2]}.${match[3]}.${match[4]}`;
+      return ipv4;
+    }else {
+      return;
+    }
+  }
+   
+
+  const temp = input.split(':');
+  const ipAddressWithoutPort = temp[temp.length-1];
+
+  if (net.isIPv4(ipAddressWithoutPort))
+    return ipAddressWithoutPort;
+    
+  if(net.isIPv6(ipAddressWithoutPort)){
+   // Check if the IPv6 address has the '::ffff:' prefix indicating it's an IPv6-mapped IPv4 address
+   const regex = /^::ffff:(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/; 
+   const match = ipAddressWithoutPort.match(regex);
+
+    if (match) {
+      const ipv4 = `${match[1]}.${match[2]}.${match[3]}.${match[4]}`;
+      return ipv4;
+    }else {
+      return;
+    }
+  }
+
+  const url = new URL(input);
+  const hostname = url.hostname;
+  const lookupAsync = util.promisify(dns.lookup);
+  const address = await lookupAsync(hostname, {family: 4, all: false});
+  return address.address;
+
+}
+
+// #endregion
 
 function doesRoomExist(roomName: string): boolean {
   return io.sockets.adapter.rooms.get(roomName) != undefined;
