@@ -375,23 +375,24 @@ export function setupServer(port?: number) {
 
 async function doesConnectionExist(frontendHttp: string) {
   console.log("doesConnectionExist called with " + frontendHttp);
-  const frontendHttpIpv6Address = getIpv6Address(frontendHttp);
-  logger.debug("resolved ip address: ", frontendHttpIpv6Address);
+  const frontendHttpIpv6Address = await getIpv6Address(frontendHttp);
+  logger.debug("resolved ip address: " + frontendHttpIpv6Address);
   if(!frontendHttpIpv6Address) {
     return false;
   }
   const sockets = await io.fetchSockets();
-  sockets.forEach(socket => {
-    const socketIpv6Address = getIpv6Address(JSON.stringify(socket.handshake.address));
-    logger.debug("resolved socket address: ", socketIpv6Address);
+  for (const socket of sockets) {
+    const socketIpv6Address = await getIpv6Address(JSON.stringify(socket.handshake.address));
+    logger.debug("resolved socket address: " + socketIpv6Address);
     if(socketIpv6Address === frontendHttpIpv6Address) 
       return true;
-  });
+  }
+ 
   return false;
 }
 
-function getIpv6Address(input: string): string | undefined {
-
+async function getIpv6Address(input: string): Promise<string | undefined> {
+  console.error("test error log");
   if (net.isIPv4(input))
     return '::ffff:' + input;
 
@@ -399,32 +400,25 @@ function getIpv6Address(input: string): string | undefined {
     return input;
 
   const temp = input.split(':');
-  const inputWithoutPort = temp[temp.length-1];
-  logger.debug("getIpv6Address of " + inputWithoutPort);
-  if (net.isIPv4(inputWithoutPort))
-    return '::ffff:' + inputWithoutPort;
+  const ipAddressWithoutPort = temp[temp.length-1];
+
+  if (net.isIPv4(ipAddressWithoutPort))
+    return '::ffff:' + ipAddressWithoutPort;
     
-  if (net.isIPv6(inputWithoutPort))
-    return inputWithoutPort;
-  
-  try {
-    const url = new URL(inputWithoutPort);
-    const hostname = url.hostname;
-    dns.lookup(hostname, 6, (err, address, ) => {
-      if(err) {
-        logger.debug("Couldn't resolve frontend url to ipv6 address: ", err.message);
-        return;
-      }
-      return address;
-    });
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error("Error message:", error.message);
-    } else {
-      console.error("An unknown error occurred");
-    }
-    return;
-  }
+  if (net.isIPv6(ipAddressWithoutPort))
+    return ipAddressWithoutPort;
+
+  const url = new URL(input);
+  const hostname = url.hostname;
+  const lookupAsync = util.promisify(dns.lookup);
+  const address = await lookupAsync(hostname);
+    
+  if(address.family === 6)
+    return address.address;
+
+  if(address.family === 4)
+    return '::ffff:' + address.address;
+
 }
 
 function doesRoomExist(roomName: string): boolean {
