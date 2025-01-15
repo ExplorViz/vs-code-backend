@@ -391,7 +391,15 @@ async function doesConnectionExist(frontendHttp: string) {
 }
 
 function getIpv6Address(input: string): string | undefined {
-  const inputWithoutPort = input.split(':')[0];
+
+  if (net.isIPv4(input))
+    return '::ffff:' + input;
+
+  if (net.isIPv6(input))
+    return input;
+
+  const temp = input.split(':');
+  const inputWithoutPort = temp[temp.length-1];
   logger.debug("getIpv6Address of " + inputWithoutPort);
   if (net.isIPv4(inputWithoutPort))
     return '::ffff:' + inputWithoutPort;
