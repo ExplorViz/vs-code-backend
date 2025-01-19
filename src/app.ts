@@ -39,7 +39,7 @@ const backend = express();
 let server: http.Server;
 const maxHttpBufferSize = 1e8;
 let io: Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>;
-
+let frontendSocketId: string;
 const defaultPort = 3001;
 
 const socketPath = "/v2/ide/";
@@ -75,8 +75,11 @@ export function setupServer(port?: number) {
   );
 
   io.on("connection", (socket) => {
-    logger.trace(`Socket ${socket.id} connected.`);
-
+    logger.trace(`Socket (${socket.handshake.query.client}) ${socket.id} connected.`);
+    if(socket.handshake.query.client === "frontend") {
+      //socket.join("frontend");
+      frontendSocketId = socket.id;
+    }
     socket.on(
       "create-pair-programming-room",
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -352,16 +355,28 @@ export function setupServer(port?: number) {
         }
     });
 
-    socket.on('create-landscape', (callback) => {
+    socket.on('create-landscape', async (data: string, callback) => {
+      const alias = data;
+      const frontendSocket = io.sockets.sockets.get(frontendSocketId);
+      if(!frontendSocket){
+        logger.debug('Unable to find frontend socket');
+        if(callback) callback();
+        return;
+      }
       let payload = undefined;
-      // TODO create landscape
-      socket.emit('create-landscape', (tokenData: {id: string; secret: string;} | undefined) => {
-        payload = tokenData;
+      frontendSocket.emit('frontend-create-landscape', alias, (tokenData: {value: string; secret: string;} | undefined) => {
+          payload = structuredClone(tokenData);
+          if(callback) {
+            callback(payload); // why does callback(tokenData) not work?
+          }
       });
 
-      if (callback) {
-        payload ? callback(payload) : callback();
-      }
+      /*try {
+        const response = await socket.to("frontend").timeout(3000).emitWithAck("frontend-create-landscape", data);
+        console.log("RECEIVED from frontend: ", JSON.stringify(response));
+      } catch (error) {
+        console.log(error);
+      }*/
     });
   });
 
@@ -389,12 +404,14 @@ async function doesConnectionExist(frontendHttp: string) {
     if (socketClient !== 'frontend')
       continue;
 
+    console.log("frontend socket address:", socketAddress);
     if (!net.isIPv4(socketAddress) && !net.isIPv6(socketAddress)){
       logger.error("Socket handshake address is not in IPv4/IPv6 format");
       continue;
     }
 
     if(socketAddress === frontendHttpIpv6Address || socketAddress === frontendHttpIpv4Address){
+      console.log("return true");
       return true;
     }
   
