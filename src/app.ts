@@ -355,6 +355,25 @@ export function setupServer(port?: number) {
         }
     });
 
+    socket.on('adds-or-deletes-debug-room',
+      () => {
+        const frontendSocket = io.sockets.sockets.get(frontendSocketId);
+        if(!frontendSocket){
+          logger.debug('Unable to find frontend socket');
+          return;
+        }
+        //let payload = undefined;
+        console.log("adds-or-deletes-debug-room");
+        frontendSocket.emit('load-current-debug-room-list-from-frontend', 
+          (roomList?: { name: string; }[]) => {
+            console.log("roomlist: ", roomList);
+            //payload = structuredClone(roomList);
+            if (roomList) io.emit("updates-debug-room-list", roomList);
+          }
+        );
+      }
+    );
+
     socket.on('create-landscape', async (data: string, callback) => {
       const alias = data;
       const frontendSocket = io.sockets.sockets.get(frontendSocketId);
@@ -363,7 +382,7 @@ export function setupServer(port?: number) {
         if(callback) callback();
         return;
       }
-      let payload = undefined;
+      let payload = undefined; // notice this is written before emit so it won't be destroyed before callback is called
       frontendSocket.emit('frontend-create-landscape', alias, (tokenData: {value: string; secret: string;} | undefined) => {
           payload = structuredClone(tokenData);
           if(callback) {
@@ -404,14 +423,12 @@ async function doesConnectionExist(frontendHttp: string) {
     if (socketClient !== 'frontend')
       continue;
 
-    console.log("frontend socket address:", socketAddress);
     if (!net.isIPv4(socketAddress) && !net.isIPv6(socketAddress)){
       logger.error("Socket handshake address is not in IPv4/IPv6 format");
       continue;
     }
 
     if(socketAddress === frontendHttpIpv6Address || socketAddress === frontendHttpIpv4Address){
-      console.log("return true");
       return true;
     }
   
