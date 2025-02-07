@@ -355,7 +355,7 @@ export function setupServer(port?: number) {
         }
     });
 
-    socket.on('adds-or-deletes-debug-room',
+    socket.on('retrieve-current-debug-room-list',
       () => {
         const frontendSocket = io.sockets.sockets.get(frontendSocketId);
         if(!frontendSocket){
@@ -365,7 +365,7 @@ export function setupServer(port?: number) {
         //let payload = undefined;
         console.log("adds-or-deletes-debug-room");
         frontendSocket.emit('load-current-debug-room-list-from-frontend', 
-          (roomList?: { name: string; }[]) => {
+          (roomList?: { alias: string; secret: string; value: string; }[]) => {
             console.log("roomlist: ", roomList);
             //payload = structuredClone(roomList);
             if (roomList) io.emit("updates-debug-room-list", roomList);
