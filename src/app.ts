@@ -351,8 +351,28 @@ export function setupServer(port?: number) {
         const frontendHttp = data;
         const payload = await doesConnectionExist(frontendHttp);
         if(callback){
+          console.log("check-frontend-connection:", payload);
           callback(payload);
         }
+    });
+
+    socket.on('load-debug-room-list', (callback) => {
+      const frontendSocket = io.sockets.sockets.get(frontendSocketId);
+        if(!frontendSocket){
+          logger.debug('Unable to find frontend socket');
+          if(callback) 
+            callback();
+
+          return;
+        }
+
+        frontendSocket.emit('load-current-debug-room-list-from-frontend', 
+          (roomList?: { alias: string; secret: string; value: string; projectName: string, commitId: string }[]) => 
+          {
+            if(callback)
+              callback(roomList);
+          }
+        );
     });
 
     socket.on('retrieve-current-debug-room-list',
@@ -374,8 +394,7 @@ export function setupServer(port?: number) {
       }
     );
 
-    socket.on('create-landscape', async (data: string, callback) => {
-      const alias = data;
+    socket.on('create-landscape', async (alias: string, projectName: string, commitId: string, callback) => {
       const frontendSocket = io.sockets.sockets.get(frontendSocketId);
       if(!frontendSocket){
         logger.debug('Unable to find frontend socket');
@@ -383,7 +402,7 @@ export function setupServer(port?: number) {
         return;
       }
       let payload = undefined; // notice this is written before emit so it won't be destroyed before callback is called
-      frontendSocket.emit('frontend-create-landscape', alias, (tokenData: {value: string; secret: string;} | undefined) => {
+      frontendSocket.emit('frontend-create-landscape', alias, projectName, commitId, (tokenData: {value: string; secret: string;} | undefined) => {
           payload = structuredClone(tokenData);
           if(callback) {
             callback(payload); // why does callback(tokenData) not work?
