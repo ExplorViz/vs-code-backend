@@ -416,6 +416,19 @@ export function setupServer(port?: number) {
         console.log(error);
       }*/
     });
+
+    socket.on('save-current-state', (token: string, timestamp: number, callback: any) => {
+      const frontendSocket = io.sockets.sockets.get(frontendSocketId);
+      if(!frontendSocket){
+        logger.debug('Unable to find frontend socket');
+        if(callback) callback();
+        return;
+      }
+      console.log("save-current-state-frontend for ", token, timestamp);
+      frontendSocket.emit('save-current-state-frontend', token, timestamp, (success: boolean) => {
+        if(callback) callback(success);
+      });
+    });
   });
 
 
