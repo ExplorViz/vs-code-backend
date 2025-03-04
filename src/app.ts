@@ -3,6 +3,7 @@ import { Server } from "socket.io";
 import http from "http";
 import dns from "dns";
 import net from "net";
+import { Collection, Document, MongoClient } from "mongodb";
 import {
   IDEApiActions,
   IDEApiCall,
@@ -22,6 +23,9 @@ import {
   colors,
   animals,
 } from "unique-names-generator";
+import { validate } from 'uuid';
+
+
 
 const customNamesGeneratorConfig: Config = {
   dictionaries: [adjectives, colors, animals],
@@ -35,6 +39,8 @@ interface SocketData {
   roomName: string | undefined;
 }
 
+// TODO: mongodb for timestamps created from save points 
+
 const backend = express();
 let server: http.Server;
 const maxHttpBufferSize = 1e8;
@@ -46,7 +52,13 @@ const socketPath = "/v2/ide/";
 
 let userInfoMap: Map<string, UserInfo> = new Map();
 
-export function setupServer(port?: number) {
+const mongoUrl = 'mongodb://localhost:27017';
+const client = new MongoClient(mongoUrl);
+const dbName = "vscode-backend";
+const collectionName = "savepoints";
+let collection: Collection<Document> | undefined = undefined;
+
+export async function setupServer(port?: number) {
   if (server) {
     io.close();
   }
@@ -417,8 +429,21 @@ export function setupServer(port?: number) {
       }*/
     });
 
-    socket.on('save-current-state', (token: string, timestamp: number, callback: any) => {
-      const frontendSocket = io.sockets.sockets.get(frontendSocketId);
+    socket.on('save-current-state', async (token: string, timestamp: number, callback: any) => {
+      try {
+        if(!collection)
+          return;
+
+        await collection.insertOne({
+          token: token,
+          timestamp: timestamp
+        });
+      } catch (error) {
+        logger.debug("Error: ", error);
+        return;
+      }
+
+      /*const frontendSocket = io.sockets.sockets.get(frontendSocketId);
       if(!frontendSocket){
         logger.debug('Unable to find frontend socket');
         if(callback) callback();
@@ -427,10 +452,46 @@ export function setupServer(port?: number) {
       console.log("save-current-state-frontend for ", token, timestamp);
       frontendSocket.emit('save-current-state-frontend', token, timestamp, (success: boolean) => {
         if(callback) callback(success);
-      });
+      });*/
     });
   });
 
+  await client.connect();
+  const db = client.db(dbName);
+  collection = db.collection(collectionName);
+  /*console.log("TEST MONGODB");
+  const findResult = await collection.find({}).toArray();
+  console.log("Found documents => ", findResult);*/
+
+  backend.get('/savepoints/:token', function(req, res){
+    if(!collection){
+      res.send(undefined);
+      return;
+    }
+
+    const token = req.params.token;
+    if(!validate(token)) {
+      logger.debug("Invalid token");
+      res.send(undefined);
+      return;
+    }
+
+
+    try {
+      const projection = { 
+        timestamp: 1 
+      };
+      const query = {
+        token: token
+      };
+      const cursor = collection.find(query, { projection });
+      const results =  cursor.toArray();
+      results.then(resp => res.send(resp));
+    } catch (e) {
+      logger.debug("Error: ", e);
+      res.send(undefined);
+    }
+  });
 
   server.listen(port, "0.0.0.0", () => {
     logger.debug(`VS Code backend listening on port ${port}`);
@@ -611,6 +672,7 @@ function getOppositeRoomWithSubchannelForGivenRoomName(
     return;
   }
 }
+
 
 setupServer();
 
