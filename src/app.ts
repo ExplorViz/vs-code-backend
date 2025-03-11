@@ -3,7 +3,7 @@ import { Server } from "socket.io";
 import http from "http";
 import dns from "dns";
 import net from "net";
-import { Collection, Document, MongoClient } from "mongodb";
+import { Collection, Document, Long, MongoClient } from "mongodb";
 import {
   IDEApiActions,
   IDEApiCall,
@@ -24,6 +24,7 @@ import {
   animals,
 } from "unique-names-generator";
 import { validate } from 'uuid';
+import cors from 'cors';
 
 
 
@@ -39,8 +40,6 @@ interface SocketData {
   roomName: string | undefined;
 }
 
-// TODO: mongodb for timestamps created from save points 
-
 const backend = express();
 let server: http.Server;
 const maxHttpBufferSize = 1e8;
@@ -52,7 +51,7 @@ const socketPath = "/v2/ide/";
 
 let userInfoMap: Map<string, UserInfo> = new Map();
 
-const mongoUrl = 'mongodb://localhost:27017';
+const mongoUrl = 'mongodb://localhost:27018';
 const client = new MongoClient(mongoUrl);
 const dbName = "vscode-backend";
 const collectionName = "savepoints";
@@ -431,15 +430,23 @@ export async function setupServer(port?: number) {
 
     socket.on('save-current-state', async (token: string, timestamp: number, callback: any) => {
       try {
-        if(!collection)
+        if(!collection){
+          if (callback)
+            callback(false);
           return;
+        }
 
         await collection.insertOne({
           token: token,
-          timestamp: timestamp
+          epochMilli: Long.fromNumber(timestamp)
         });
+        if (callback)
+          callback(true);
+
       } catch (error) {
         logger.debug("Error: ", error);
+        if(callback)
+          callback(false);
         return;
       }
 
@@ -463,6 +470,8 @@ export async function setupServer(port?: number) {
   const findResult = await collection.find({}).toArray();
   console.log("Found documents => ", findResult);*/
 
+  backend.use(cors());
+
   backend.get('/savepoints/:token', function(req, res){
     if(!collection){
       res.send(undefined);
@@ -478,15 +487,25 @@ export async function setupServer(port?: number) {
 
 
     try {
+      const newest = req.query.newest ? Number(req.query.newest) : undefined;
       const projection = { 
-        timestamp: 1 
+        epochMilli: 1
       };
-      const query = {
-        token: token
+      const query: any = {
+        token: token,
       };
+      if(newest) {
+        console.log("newest = ", newest);
+        query.epochMilli = { $gt: newest };
+      }
       const cursor = collection.find(query, { projection });
       const results =  cursor.toArray();
-      results.then(resp => res.send(resp));
+      results.then(resp => {
+        for (const elem of resp) {
+          elem['spanCount'] = 0; // TODO: spanCount not hard coded
+        }
+        res.send(resp);
+      });
     } catch (e) {
       logger.debug("Error: ", e);
       res.send(undefined);
