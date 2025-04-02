@@ -485,6 +485,7 @@ export async function setupServer(port?: number) {
       return;
     }
 
+    // TODO: introduce a new newest to query from frontend (at this moment the newest intended for the span-service is used, therefore savepoints could be skipped or resent)
 
     try {
       const newest = req.query.newest ? Number(req.query.newest) : undefined;
