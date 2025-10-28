@@ -89,6 +89,7 @@ export async function setupServer(port?: number) {
     logger.trace(`Socket (${socket.handshake.query.client}) ${socket.id} connected.`);
     if(socket.handshake.query.client === "frontend") {
       //socket.join("frontend");
+      logger.debug("Connection with frontend established.");
       frontendSocketId = socket.id;
     }
     socket.on(
