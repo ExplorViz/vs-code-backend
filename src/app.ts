@@ -45,7 +45,7 @@ let server: http.Server;
 const maxHttpBufferSize = 1e8;
 let io: Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>;
 let frontendSocketId: string;
-const defaultPort = 3001;
+const defaultPort = 3000;
 
 const socketPath = "/v2/ide/";
 
@@ -91,6 +91,8 @@ export async function setupServer(port?: number) {
       //socket.join("frontend");
       logger.debug("Connection with frontend established.");
       frontendSocketId = socket.id;
+    }else {
+      console.log(`New client connected: ${socket.id}`);
     }
     socket.on(
       "create-pair-programming-room",
@@ -301,7 +303,7 @@ export async function setupServer(port?: number) {
       logger.debug(
         "Socket " + socket.id + ': ' + reason
       );
-
+      console.log("Socket disconnected " + socket.id + ': ' + reason);
       // NOTE: The socket.id gets removed from the adapter.sids after the 'disconnect'-event was handled!
       const room = socket.data.roomName; 
       if (room) {
@@ -504,7 +506,9 @@ export async function setupServer(port?: number) {
       const results =  cursor.toArray();
       results.then(resp => {
         for (const elem of resp) {
-          elem['spanCount'] = 0; // TODO: spanCount not hard coded
+          elem['timestamp'] = { epochMilli: elem['epochMilli'], spanCount: 0 }; // TODO: spanCount not hard coded
+          delete elem['epochMilli'];
+          // TODO: include debug state variables (which state exactly?)
         }
         res.send(resp);
       });
