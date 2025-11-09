@@ -51,10 +51,10 @@ const socketPath = "/v2/ide/";
 
 let userInfoMap: Map<string, UserInfo> = new Map();
 
-const mongoUrl = 'mongodb://localhost:27018';
+const mongoUrl = 'mongodb://mongo-extension-backend:27017';
 const client = new MongoClient(mongoUrl);
 const dbName = "vscode-backend";
-const collectionName = "savepoints";
+const collectionName = "snapshots";
 let collection: Collection<Document> | undefined = undefined;
 
 export async function setupServer(port?: number) {
@@ -522,26 +522,32 @@ export async function setupServer(port?: number) {
 // #region Debug Session Helper
 
 async function doesConnectionExist(frontendHttp: string) {
+  console.log('doesConnectionExist called with: ', frontendHttp);
   const frontendHttpIpv6Address = await getIpv6Address(frontendHttp);
   const frontendHttpIpv4Address = await getIpv4Address(frontendHttp);
+  console.log("Frontend HTTP IPv6 Address: ", frontendHttpIpv6Address);
+  console.log("Frontend HTTP IPv4 Address: ", frontendHttpIpv4Address);
   if(!frontendHttpIpv6Address && !frontendHttpIpv4Address) {
     logger.error("Unable to determine frontend ip address");
+    console.log("Unable to determine frontend ip address")
     return false;
   }
   const sockets = await io.fetchSockets();
   for (const socket of sockets) {
+
     const socketAddress = socket.handshake.address;
     const socketClient = socket.handshake.query.client;
-
+    console.log("Socket address: ", socketAddress, " client: ", socketClient);
     if (socketClient !== 'frontend')
       continue;
 
     if (!net.isIPv4(socketAddress) && !net.isIPv6(socketAddress)){
       logger.error("Socket handshake address is not in IPv4/IPv6 format");
+      console.log("Socket handshake address is not in IPv4/IPv6 format");
       continue;
     }
 
-    if(socketAddress === frontendHttpIpv6Address || socketAddress === frontendHttpIpv4Address){
+    if(socketClient === 'frontend' || socketAddress === frontendHttpIpv6Address || socketAddress === frontendHttpIpv4Address){
       return true;
     }
   
