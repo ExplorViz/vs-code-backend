@@ -51,7 +51,7 @@ const socketPath = "/v2/ide/";
 
 let userInfoMap: Map<string, UserInfo> = new Map();
 
-const mongoUrl = 'mongodb://mongo-extension-backend:27017';
+const mongoUrl = 'mongodb://localhost:27018';
 const client = new MongoClient(mongoUrl);
 const dbName = "vscode-backend";
 const collectionName = "snapshots";
@@ -439,9 +439,11 @@ export async function setupServer(port?: number) {
           return;
         }
 
+        console.log("timestamp: ", timestamp);
+
         await collection.insertOne({
           token: token,
-          epochMilli: Long.fromNumber(timestamp)
+          epochNano: Long.fromNumber(timestamp)
         });
         if (callback)
           callback(true);
@@ -493,21 +495,21 @@ export async function setupServer(port?: number) {
     try {
       const newest = req.query.newest ? Number(req.query.newest) : undefined;
       const projection = { 
-        epochMilli: 1
+        epochNano: 1
       };
       const query: any = {
         token: token,
       };
       if(newest) {
         console.log("newest = ", newest);
-        query.epochMilli = { $gt: newest };
+        query.epochNano = { $gt: newest };
       }
       const cursor = collection.find(query, { projection });
       const results =  cursor.toArray();
       results.then(resp => {
         for (const elem of resp) {
-          elem['timestamp'] = { epochMilli: elem['epochMilli'], spanCount: 0 }; // TODO: spanCount not hard coded
-          delete elem['epochMilli'];
+          elem['timestamp'] = { epochNano: Number(elem['epochNano'].toString()), spanCount: 0 }; // TODO: spanCount not hard coded
+          delete elem['epochNano'];
           // TODO: include debug state variables (which state exactly?)
         }
         res.send(resp);
