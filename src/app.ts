@@ -12,6 +12,8 @@ import {
   UserInfoInitPayload,
   RoomJoinPayload,
   TextSelection,
+  ExtensionVariableEntry,
+  turnVariableEntriesToDebugSnapshot,
 } from "./types";
 import logger from "./logger";
 import * as util from "util";
@@ -25,6 +27,7 @@ import {
 } from "unique-names-generator";
 import { validate } from 'uuid';
 import cors from 'cors';
+import { Console, time } from "console";
 
 
 
@@ -51,7 +54,7 @@ const socketPath = "/v2/ide/";
 
 let userInfoMap: Map<string, UserInfo> = new Map();
 
-const mongoUrl = 'mongodb://localhost:27018';
+const mongoUrl = 'mongodb://localhost:27017';
 const client = new MongoClient(mongoUrl);
 const dbName = "vscode-backend";
 const collectionName = "snapshots";
@@ -431,19 +434,54 @@ export async function setupServer(port?: number) {
       }*/
     });
 
-    socket.on('save-current-state', async (token: string, timestamp: number, callback: any) => {
+    socket.on('save-current-state', async (token: string, timestamp: number, valueList: ExtensionVariableEntry[], callback: any) => {
       try {
         if(!collection){
           if (callback)
             callback(false);
           return;
         }
+        
 
-        console.log("timestamp: ", timestamp);
+
+        console.log("New Values were saved at timestamp: ", timestamp);
+        
+        // console.log("The Values are: ");
+        // valueList.forEach((variableEntry) => {
+        //   console.log("Variable Name: ", variableEntry.varname);
+        //   variableEntry.classes.forEach((classEntry) => {
+        //     console.log("  Class Name: ", classEntry.className);
+        //     classEntry.values.forEach((stateValue) => {
+        //       console.log("    Value: ", stateValue.value, " Type: ", stateValue.type, " ObjRef: ", stateValue.objReference);
+        //     });
+        //   });
+        // });
+
+        const debugSnapshot = turnVariableEntriesToDebugSnapshot(valueList, timestamp);
+        
+        // console.log("Turned to DebugSnapshot: ", debugSnapshot);
+        // debugSnapshot.classes.forEach((classEntry) => {
+        //   console.log("Class Name: ", classEntry.className);
+        //   classEntry.instances.forEach((instance) => {
+        //     console.log("  Instance ID: ", instance.instanceId, " Method Name: ", instance.methodName);
+        //     instance.variables.forEach((variable) => {
+        //       console.log("    Variable Name: ", variable.name, " Type: ", variable.type, " Value: ", variable.value);
+        //     });
+        //   });
+        //   classEntry.methods.forEach((method) => {
+        //     console.log("  Method Instance ID: ", method.instanceId, " Method Name: ", method.methodName);
+        //     method.variables.forEach((variable) => {
+        //       console.log("    Variable Name: ", variable.name, " Type: ", variable.type, " Value: ", variable.value);
+        //     });
+        //   });
+        // });
+        
+
 
         await collection.insertOne({
           token: token,
-          epochNano: Long.fromNumber(timestamp)
+          epochNano: Long.fromNumber(timestamp),
+          debugSnapshot: debugSnapshot
         });
         if (callback)
           callback(true);
@@ -455,17 +493,49 @@ export async function setupServer(port?: number) {
         return;
       }
 
-      /*const frontendSocket = io.sockets.sockets.get(frontendSocketId);
+      const frontendSocket = io.sockets.sockets.get(frontendSocketId);
       if(!frontendSocket){
         logger.debug('Unable to find frontend socket');
-        if(callback) callback();
+        if(callback) callback(false);
         return;
       }
-      console.log("save-current-state-frontend for ", token, timestamp);
-      frontendSocket.emit('save-current-state-frontend', token, timestamp, (success: boolean) => {
-        if(callback) callback(success);
-      });*/
+      frontendSocket.emit('receive-new-debug-snapshot-timestamp', token, timestamp, (success: boolean) => {
+        if(callback) {console.log("Success: ", success); callback(success);}
+      });
     });
+
+    socket.on('request-debug-state-snapshot', async (token: string, timestamp: number, callback: any) => {
+      if(collection){
+        collection.findOne({token: token, epochNano: Long.fromNumber(timestamp)}).then((doc) => {
+          if(doc && doc.debugSnapshot){
+            callback(true, doc.debugSnapshot.classes);
+          } else {
+            callback(true, []);
+          }
+        }).catch((error) => {
+          logger.debug("Error retrieving debug snapshot: ", error);
+          callback(false, []);
+        });
+      } else callback(false, []);
+
+    });
+
+    socket.on('request-all-debug-timestamps', async (token: string, callback: any) => {
+      if(collection){
+      
+        collection.find({token: token}, {projection: {epochNano: 1, _id: 0}}).toArray().then((docs) => {
+          
+          const timestamps: number[] = docs.map(doc => Number(doc.epochNano.toString()));
+          callback(true, timestamps);
+
+        }).catch((error) => {
+          logger.debug("Error retrieving timestamps: ", error);
+          callback(false, []);
+          
+        });
+      } else callback(true, []);
+    });
+
   });
 
   await client.connect();
