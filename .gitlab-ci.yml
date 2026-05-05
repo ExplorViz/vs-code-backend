@@ -12,8 +12,6 @@ cache:
 stages:
   - code-analysis
   - test
-  - deploy:images
-  - deploy:retagging
 
 workflow:
   rules:
@@ -38,55 +36,3 @@ test:
   script:
     - npm install
     - npm run test
-
-.deploy-to-dockerhub:
-  stage: deploy:images
-  tags:
-    - exec-docker
-  variables:
-    DOCKERHUB_TAG: "latest"
-  image:
-    name: gcr.io/kaniko-project/executor:debug
-    entrypoint: [""]
-  script:
-    - mkdir -p /kaniko/.docker
-    - echo "{\"auths\":{\"$CONTAINER_REGISTRY_URL\":{\"auth\":\"$(echo -n ${DOCKERHUB_USERNAME}:${DOCKERHUB_PASSWORD} | base64)\"}}}" > /kaniko/.docker/config.json
-    - /kaniko/executor
-      --context=$CI_PROJECT_DIR
-      --dockerfile=$CI_PROJECT_DIR/Dockerfile
-      --destination=$DOCKERHUB_ORGANIZATION/$DOCKERHUB_IMAGE_NAME:$DOCKERHUB_TAG
-
-deploy-backend-amd64:
-  variables:
-    DOCKERHUB_TAG: "amd64"
-  extends:
-    - .deploy-to-dockerhub
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-    - if: $CI_PIPELINE_SOURCE == "web"
-
-deploy-backend-arm64:
-  variables:
-    DOCKERHUB_TAG: "arm64"
-  extends:
-    - .deploy-to-dockerhub
-  tags:
-    - arm64
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-    - if: $CI_PIPELINE_SOURCE == "web"
-
-retag-backend-as-latest:
-  extends: .retag-dockerhub-image
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "schedule"
-      when: never
-  variables:
-    SOURCE_TAG: "amd64"
-    TARGET_TAG: "latest"
-
-publish-multi-arch-backend:
-  extends: .retag-as-multi-arch-dockerhub-image
-  variables:
-    MANIFEST_PLATFORMS: "linux/amd64,linux/arm64/v8"
