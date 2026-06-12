@@ -12,8 +12,7 @@ import {
   UserInfoInitPayload,
   RoomJoinPayload,
   TextSelection,
-  ExtensionVariableEntry,
-  turnVariableEntriesToDebugSnapshot,
+  ExtensionDebugSnapshotData,
 } from "./types";
 import logger from "./logger";
 import * as util from "util";
@@ -28,6 +27,8 @@ import {
 import { validate } from 'uuid';
 import cors from 'cors';
 import { Console, time } from "console";
+import { forwardDebugSnapshotViaGrpc } from "./grpc/debugSnapshotForwarder";
+import { isExtensionDebugSnapshotData } from "./validators/debugSnapshotValidator";
 
 
 
@@ -434,75 +435,37 @@ export async function setupServer(port?: number) {
       }*/
     });
 
-    socket.on('save-current-state', async (token: string, timestamp: number, valueList: ExtensionVariableEntry[], callback: any) => {
-      try {
-        if(!collection){
-          if (callback)
-            callback(false);
-          return;
+    socket.on(
+      "save-current-state",
+      async (
+        snapshotData: unknown,
+        callback?: (success: boolean) => void
+      ) => {
+        console.log("save-current-state handler reached");
+        console.log("snapshotData:", JSON.stringify(snapshotData, null, 2));
+        console.log("callback type:", typeof callback);
+
+        try {
+          if (!isExtensionDebugSnapshotData(snapshotData)) {
+            logger.debug("Invalid save-current-state payload.");
+            console.log("Invalid snapshot payload");
+            callback?.(false);
+            return;
+          }
+
+          console.log("Payload valid. Forwarding via gRPC...");
+
+          const success = await forwardDebugSnapshotViaGrpc(snapshotData);
+
+          console.log("gRPC forwarding result:", success);
+
+          callback?.(success);
+        } catch (error) {
+          console.error("Error in save-current-state:", error);
+          callback?.(false);
         }
-        
-
-
-        console.log("New Values were saved at timestamp: ", timestamp);
-        
-        // console.log("The Values are: ");
-        // valueList.forEach((variableEntry) => {
-        //   console.log("Variable Name: ", variableEntry.varname);
-        //   variableEntry.classes.forEach((classEntry) => {
-        //     console.log("  Class Name: ", classEntry.className);
-        //     classEntry.values.forEach((stateValue) => {
-        //       console.log("    Value: ", stateValue.value, " Type: ", stateValue.type, " ObjRef: ", stateValue.objReference);
-        //     });
-        //   });
-        // });
-
-        const debugSnapshot = turnVariableEntriesToDebugSnapshot(valueList, timestamp);
-        
-        // console.log("Turned to DebugSnapshot: ", debugSnapshot);
-        // debugSnapshot.classes.forEach((classEntry) => {
-        //   console.log("Class Name: ", classEntry.className);
-        //   classEntry.instances.forEach((instance) => {
-        //     console.log("  Instance ID: ", instance.instanceId, " Method Name: ", instance.methodName);
-        //     instance.variables.forEach((variable) => {
-        //       console.log("    Variable Name: ", variable.name, " Type: ", variable.type, " Value: ", variable.value);
-        //     });
-        //   });
-        //   classEntry.methods.forEach((method) => {
-        //     console.log("  Method Instance ID: ", method.instanceId, " Method Name: ", method.methodName);
-        //     method.variables.forEach((variable) => {
-        //       console.log("    Variable Name: ", variable.name, " Type: ", variable.type, " Value: ", variable.value);
-        //     });
-        //   });
-        // });
-        
-
-
-        await collection.insertOne({
-          token: token,
-          epochNano: Long.fromNumber(timestamp),
-          debugSnapshot: debugSnapshot
-        });
-        if (callback)
-          callback(true);
-
-      } catch (error) {
-        logger.debug("Error: ", error);
-        if(callback)
-          callback(false);
-        return;
       }
-
-      const frontendSocket = io.sockets.sockets.get(frontendSocketId);
-      if(!frontendSocket){
-        logger.debug('Unable to find frontend socket');
-        if(callback) callback(false);
-        return;
-      }
-      frontendSocket.emit('receive-new-debug-snapshot-timestamp', token, timestamp, (success: boolean) => {
-        if(callback) {console.log("Success: ", success); callback(success);}
-      });
-    });
+    );
 
     socket.on('request-debug-state-snapshot', async (token: string, timestamp: number, callback: any) => {
       if(collection){

@@ -15,6 +15,57 @@ export enum IDEApiActions {
   DisconnectIDE = 'disconnectIDE',
 }
 
+export type WatchedVariableId = string;
+export type VariableName = string;
+export type OwnerType = string;
+
+export type MatchConfidence =
+  | "declaration-location"
+  | "owner-type"
+  | "known-subtype"
+  | "name-only";
+
+export type ExtensionRuntimeVariableValue = {
+  value: string;
+  type: string;
+
+  /**
+   * Runtime-local owner object identity, e.g. "DebugClass@41".
+   * Only meaningful within the same debug session.
+   */
+  objectReference?: string;
+
+  matchConfidence?: MatchConfidence;
+  runtimePath?: string;
+};
+
+export type ExtensionRuntimeOwnerGroup = {
+  ownerType: OwnerType;
+  values: ExtensionRuntimeVariableValue[];
+};
+
+export type ExtensionVariableSnapshotEntry = {
+  id: WatchedVariableId;
+  name: VariableName;
+  definitionUri: string;
+
+  sourcePath: string;
+  fileName: string;
+  packageName: string;
+  className: string;
+
+  ownerGroup: ExtensionRuntimeOwnerGroup;
+};
+
+export type ExtensionDebugSnapshotData = {
+  landscapeToken: string;
+  debugRunId: string;
+  repositoryName: string;
+  commitHash: string;
+  epochNano: number;
+  variables: ExtensionVariableSnapshotEntry[];
+};
+
 export type TextSelection = {
   documentUri: string;
   startLine: number;
