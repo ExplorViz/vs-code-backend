@@ -21,8 +21,9 @@ export type OwnerType = string;
 
 export type MatchConfidence =
   | "declaration-location"
-  | "owner-type"
-  | "known-subtype"
+  | "exact-owner-type"
+  | "owner-subtype"
+  | "imprecise-owner-type"
   | "name-only";
 
 export type ExtensionRuntimeVariableValue = {

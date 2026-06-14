@@ -109,8 +109,9 @@ function isExtensionRuntimeVariableValue(
 function isMatchConfidence(value: unknown): value is MatchConfidence {
   return (
     value === "declaration-location" ||
-    value === "owner-type" ||
-    value === "known-subtype" ||
+    value === "exact-owner-type" ||
+    value === "owner-subtype" ||
+    value === "imprecise-owner-type" ||
     value === "name-only"
   );
 }
