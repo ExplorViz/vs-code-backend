@@ -1,34 +1,25 @@
 import express from "express";
 import { Server } from "socket.io";
 import http from "http";
+import dns from "dns";
+import net from "net";
+import { Collection, Document, Long, MongoClient } from "mongodb";
 import {
-  IDEApiActions,
-  IDEApiCall,
-  IDEApiDest,
   UserInfo,
   UserInfoInitPayload,
   RoomJoinPayload,
   TextSelection,
+  ExtensionDebugSnapshotData,
 } from "./types";
 import logger from "./logger";
 import * as util from "util";
 import { DefaultEventsMap } from "socket.io/dist/typed-events";
-import {
-  uniqueNamesGenerator,
-  Config,
-  adjectives,
-  colors,
-  animals,
-} from "unique-names-generator";
+import { validate } from 'uuid';
+import cors from 'cors';
+import { forwardDebugSnapshotViaGrpc } from "./grpc/debugSnapshotForwarder";
+import { isExtensionDebugSnapshotData } from "./validators/debugSnapshotValidator";
 
-const customNamesGeneratorConfig: Config = {
-  dictionaries: [adjectives, colors, animals],
-  separator: "-",
-  length: 3,
-};
 
-// Needing some custom data to be stored in a socket.
-// TODO: Does every socket has its own data?
 interface SocketData {
   roomName: string | undefined;
 }
@@ -37,19 +28,21 @@ const backend = express();
 let server: http.Server;
 const maxHttpBufferSize = 1e8;
 let io: Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>;
-
+let frontendSocketId: string;
 const defaultPort = 3000;
-
 const socketPath = "/v2/ide/";
 
-let userInfoMap: Map<string, UserInfo> = new Map();
+const mongoUrl = process.env.MONGO_URL ?? 'mongodb://localhost:27018';
+const client = new MongoClient(mongoUrl);
+const dbName = "vscode-backend";
+const collectionName = "snapshots";
+let collection: Collection<Document> | undefined = undefined;
 
-export function setupServer(port?: number) {
+export async function setupServer(port?: number) {
   if (server) {
     io.close();
   }
 
-  userInfoMap = new Map();
 
   server = http.createServer(backend);
 
@@ -73,272 +66,203 @@ export function setupServer(port?: number) {
   );
 
   io.on("connection", (socket) => {
-    logger.trace(`Socket ${socket.id} connected.`);
+    logger.trace(`Socket (${socket.handshake.query.client}) ${socket.id} connected.`);
+    if(socket.handshake.query.client === "frontend") {
+      //socket.join("frontend");
+      logger.debug("Connection with frontend established.");
+      frontendSocketId = socket.id;
+    }else {
+      console.log(`New client connected: ${socket.id}`);
+    }
 
-    socket.on(
-      "create-pair-programming-room",
+    socket.on('check-frontend-connection', 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (callback: any) => {
-        const roomSubChannel = "pairprogramming";
+      async (data: string, callback: any) => {
+        const frontendHttp = data;
+        const payload = await doesConnectionExist(frontendHttp);
+        if(callback){
+          console.log("check-frontend-connection:", payload);
+          callback(payload);
+        }
+    });
 
-        const uniqueRoomName = uniqueNamesGenerator(customNamesGeneratorConfig);
+    socket.on('load-debug-room-list', (callback) => {
+      const frontendSocket = io.sockets.sockets.get(frontendSocketId);
+        if(!frontendSocket){
+          logger.debug('Unable to find frontend socket');
+          if(callback) 
+            callback();
 
-        const roomName = uniqueRoomName + ":" + roomSubChannel;
-        socket.data.roomName = roomName;
-        socket.join(roomName);
+          return;
+        }
 
-        logger.debug(
-          `Socket ${socket.id} created and joined PP room ${uniqueRoomName}.`
+        frontendSocket.emit('load-current-debug-room-list-from-frontend', 
+          (roomList?: { alias: string; secret: string; value: string; projectName: string, commitId: string }[]) => 
+          {
+            if(callback)
+              callback(roomList);
+          }
         );
+    });
 
-        if (callback) {
-          callback(uniqueRoomName);
+    socket.on('retrieve-current-debug-room-list',
+      () => {
+        const frontendSocket = io.sockets.sockets.get(frontendSocketId);
+        if(!frontendSocket){
+          logger.debug('Unable to find frontend socket');
+          return;
         }
+        //let payload = undefined;
+        console.log("adds-or-deletes-debug-room");
+        frontendSocket.emit('load-current-debug-room-list-from-frontend', 
+          (roomList?: { alias: string; secret: string; value: string; }[]) => {
+            console.log("roomlist: ", roomList);
+            //payload = structuredClone(roomList);
+            if (roomList) io.emit("updates-debug-room-list", roomList);
+          }
+        );
       }
     );
 
-    socket.on(
-      "join-pair-programming-room",
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (roomName: string, callback: any) => {
-        const roomSubChannel = "pairprogramming";
-        if (
-          process.env.EXPERIMENT_MODE == "true" ||
-          doesRoomExist(roomName + ":" + roomSubChannel)
-        ) {
-          socket.join(roomName + ":" + roomSubChannel);
-          logger.debug(`Socket ${socket.id} joined PP room ${roomName}.`);
-
-          if (callback) {
-            callback(roomName);
-          }
-        } else {
-          if (callback) {
-            callback();
-          }
-        }
+    socket.on('create-landscape', async (alias: string, projectName: string, commitId: string, callback) => {
+      const frontendSocket = io.sockets.sockets.get(frontendSocketId);
+      if(!frontendSocket){
+        logger.debug('Unable to find frontend socket');
+        if(callback) callback();
+        return;
       }
-    );
+      let payload = undefined; // notice this is written before emit so it won't be destroyed before callback is called
+      frontendSocket.emit('frontend-create-landscape', alias, projectName, commitId, (tokenData: {value: string; secret: string;} | undefined) => {
+          payload = structuredClone(tokenData);
+          if(callback) {
+            callback(payload); // why does callback(tokenData) not work?
+          }
+      });
+
+      /*try {
+        const response = await socket.to("frontend").timeout(3000).emitWithAck("frontend-create-landscape", data);
+        console.log("RECEIVED from frontend: ", JSON.stringify(response));
+      } catch (error) {
+        console.log(error);
+      }*/
+    });
 
     socket.on(
-      "broadcast-text-selection",
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (data: TextSelection, callback: any) => {
-        const room = getPairProgrammingRoomSubchannelForSocketId(socket.id);
+      "save-current-state",
+      async (
+        snapshotData: unknown,
+        callback?: (success: boolean) => void
+      ) => {
+        //console.log("save-current-state handler reached");
+        //console.log("snapshotData:", JSON.stringify(snapshotData, null, 2));
+        //console.log("callback type:", typeof callback);
 
-        if (room) {
-          socket.broadcast.to(room).emit("receive-text-selection", data);
-
-          if (callback) {
-            callback(true);
-          }
-        } else {
-          if (callback) {
-            callback(false);
-          }
-        }
-
-        /* if(room) {
-          io.in("room1").fetchSockets().then((sockets) => {
-            sockets.forEach((socket) => {
-              if(socket.id.)
-            });
-          });
-        }*/
-      }
-    );
-
-    socket.on(
-      "join-custom-room",
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (data: RoomJoinPayload, callback: any) => {
-        if (!io.sockets.adapter.rooms.get(data.roomId + ":frontend")) {
-          if (callback) {
-            callback();
+        try {
+          if (!isExtensionDebugSnapshotData(snapshotData)) {
+            logger.debug("Invalid save-current-state payload.");
+            //console.log("Invalid snapshot payload");
+            callback?.(false);
             return;
           }
-        }
 
-        const roomSubChannel = "ide";
-        const roomToJoin = data.roomId + ":" + roomSubChannel;
-        socket.data.roomName = roomToJoin;
-        socket.join(roomToJoin);
+          //console.log("Payload valid. Forwarding via gRPC...");
 
-        if (callback) {
-          callback(data.roomId);
-        }
+          const success = await forwardDebugSnapshotViaGrpc(snapshotData);
 
-        // send event to frontend, so that frontend knows that new ide joined
-        // that needs data
+          //console.log("gRPC forwarding result:", success);
 
-        const room = getRoomWithSubchannelForSocketId(socket.id);
-        if (room) {
-          const oppositeRoom =
-            getOppositeRoomWithSubchannelForGivenRoomName(room);
-
-          if (oppositeRoom) {
-            const getVizDataPayload = {
-              action: IDEApiActions.GetVizData,
-            };
-
-            logger.debug(
-              `Send event ${getVizDataPayload.action} from ${room} to ${oppositeRoom}`
-            );
-
-            socket.to(oppositeRoom).emit(IDEApiDest.VizDo, getVizDataPayload);
-          }
-        }
-
-        logger.debug(`Socket ${socket.id} joined room ${roomToJoin}.`);
-      }
-    );
-
-    socket.on(
-      "update-user-info",
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (data: UserInfoInitPayload, callback: any) => {
-        const foundUserId = userInfoMap.get(data.userId);
-        const roomSubChannel = "frontend";
-
-        let roomResponse = "";
-
-        if (!foundUserId) {
-          logger.trace(
-            {
-              event: util.inspect(socket.rooms),
-            },
-            "rooms obj before join"
-          );
-
-          const uniqueRoomName = uniqueNamesGenerator(
-            customNamesGeneratorConfig
-          );
-
-          const roomName = uniqueRoomName + ":" + roomSubChannel;
-          socket.data.roomName = roomName;
-          socket.join(roomName);
-
-          logger.debug(
-            `Socket ${socket.id} with username ${data.userId} joined room ${
-              uniqueRoomName + ":" + roomSubChannel
-            }.`
-          );
-
-          logger.trace(
-            { event: util.inspect(socket.rooms) },
-            "rooms obj after join"
-          );
-
-          const newUserInfo: UserInfo = {
-            userId: data.userId,
-            room: uniqueRoomName,
-            socketId: socket.id,
-          };
-          userInfoMap.set(data.userId, newUserInfo);
-          roomResponse = uniqueRoomName;
-        } else {
-          const { room } = foundUserId;
-
-          const updatedUserInfo: UserInfo = {
-            userId: data.userId,
-            room: room,
-            socketId: socket.id,
-          };
-
-          const roomName = room + ":" + roomSubChannel;
-          socket.data.roomName = roomName;
-          socket.join(roomName);
-
-          logger.debug(
-            `Socket ${socket.id} with username ${data.userId} re-joined room ${
-              room + ":" + roomSubChannel
-            }.`
-          );
-
-          userInfoMap.set(data.userId, updatedUserInfo);
-          roomResponse = room;
-        }
-        if (callback && roomResponse.length > 0) {
-          callback(roomResponse);
+          callback?.(success);
+        } catch (error) {
+          console.error("Error in save-current-state:", error);
+          callback?.(false);
         }
       }
     );
 
-    socket.on(IDEApiDest.VizDo, (data: IDEApiCall) => {
-      const room = getRoomWithSubchannelForSocketId(socket.id);
-      if (room) {
-        const oppositeRoom =
-          getOppositeRoomWithSubchannelForGivenRoomName(room);
-
-        if (oppositeRoom) {
-          logger.debug(
-            `Send event ${data.action} from ${room} to ${oppositeRoom}`
-          );
-          socket.to(oppositeRoom).emit(IDEApiDest.VizDo, data);
-        }
-      }
-    });
-
-    // Handle the case a client (unexpectedly) closes:
-    socket.on('disconnect', (reason) => {
-      logger.debug(
-        "Socket " + socket.id + ': ' + reason
-      );
-
-      // NOTE: The socket.id gets removed from the adapter.sids after the 'disconnect'-event was handled!
-      const room = socket.data.roomName; 
-      if (room) {
-        const oppositeRoom =
-          getOppositeRoomWithSubchannelForGivenRoomName(room);
-
-        if (oppositeRoom) {
-          logger.debug(
-            `A client from ${room} has closed the connection to ${oppositeRoom}`
-          );
-
-          // Has a frontend or an IDE closed?
-          if (room.includes(":ide")) {
-            socket.to(oppositeRoom).emit(IDEApiDest.VizDo, {
-              action: IDEApiActions.DisconnectIDE,
-              data: [],
-              meshId: '',
-              fqn: '',
-              occurrenceID: -1,
-              foundationCommunicationLinks: '',
-            });
-
-          } else if (room.includes(":frontend")) {
-            socket.to(oppositeRoom).emit(IDEApiDest.IDEDo, {
-              action: IDEApiActions.DisconnectFrontend,
-              data: [],
-              meshId: '',
-              fqn: '',
-              occurrenceID: -1,
-              foundationCommunicationLinks: '',
-            });
+    socket.on('request-debug-state-snapshot', async (token: string, timestamp: number, callback: any) => {
+      if(collection){
+        collection.findOne({token: token, epochNano: Long.fromNumber(timestamp)}).then((doc) => {
+          if(doc && doc.debugSnapshot){
+            callback(true, doc.debugSnapshot.classes);
           } else {
-            logger.debug('Connect_Error: Wrong room name ${room}.');
+            callback(true, []);
           }
-        } else {
-          logger.debug('No room found for socket ${socket.id}.');
-        }
-      }
+        }).catch((error) => {
+          logger.debug("Error retrieving debug snapshot: ", error);
+          callback(false, []);
+        });
+      } else callback(false, []);
+
     });
 
-    socket.on(IDEApiDest.IDEDo, (data: IDEApiCall) => {
-      const room = getRoomWithSubchannelForSocketId(socket.id);
-      if (room) {
-        const oppositeRoom =
-          getOppositeRoomWithSubchannelForGivenRoomName(room);
+    socket.on('request-all-debug-timestamps', async (token: string, callback: any) => {
+      if(collection){
+      
+        collection.find({token: token}, {projection: {epochNano: 1, _id: 0}}).toArray().then((docs) => {
+          
+          const timestamps: number[] = docs.map(doc => Number(doc.epochNano.toString()));
+          callback(true, timestamps);
 
-        if (oppositeRoom) {
-          logger.debug(
-            `Send event ${data.action} from ${room} to ${oppositeRoom}`
-          );
-          socket.to(oppositeRoom).emit(IDEApiDest.IDEDo, data);
-        }
-      }
+        }).catch((error) => {
+          logger.debug("Error retrieving timestamps: ", error);
+          callback(false, []);
+          
+        });
+      } else callback(true, []);
     });
+
+  });
+
+  await client.connect();
+  const db = client.db(dbName);
+  collection = db.collection(collectionName);
+  /*console.log("TEST MONGODB");
+  const findResult = await collection.find({}).toArray();
+  console.log("Found documents => ", findResult);*/
+
+  backend.use(cors());
+
+  backend.get('/savepoints/:token', function(req, res){
+    if(!collection){
+      res.send(undefined);
+      return;
+    }
+
+    const token = req.params.token;
+    if(!validate(token)) {
+      logger.debug("Invalid token");
+      res.send(undefined);
+      return;
+    }
+
+    // TODO: introduce a new newest to query from frontend (at this moment the newest intended for the span-service is used, therefore savepoints could be skipped or resent)
+
+    try {
+      const newest = req.query.newest ? Number(req.query.newest) : undefined;
+      const projection = { 
+        epochNano: 1
+      };
+      const query: any = {
+        token: token,
+      };
+      if(newest) {
+        //console.log("newest = ", newest);
+        query.epochNano = { $gt: newest };
+      }
+      const cursor = collection.find(query, { projection });
+      const results =  cursor.toArray();
+      results.then(resp => {
+        for (const elem of resp) {
+          elem['timestamp'] = { epochNano: Number(elem['epochNano'].toString()), spanCount: 0 }; // TODO: spanCount not hard coded
+          delete elem['epochNano'];
+          // TODO: include debug state variables (which state exactly?)
+        }
+        res.send(resp);
+      });
+    } catch (e) {
+      logger.debug("Error: ", e);
+      res.send(undefined);
+    }
   });
 
   server.listen(port, "0.0.0.0", () => {
@@ -346,71 +270,123 @@ export function setupServer(port?: number) {
   });
 }
 
-function doesRoomExist(roomName: string): boolean {
-  return io.sockets.adapter.rooms.get(roomName) != undefined;
+
+// #region Connection Helper
+
+async function doesConnectionExist(frontendHttp: string) {
+  //console.log('doesConnectionExist called with: ', frontendHttp);
+  const frontendHttpIpv6Address = await getIpv6Address(frontendHttp);
+  const frontendHttpIpv4Address = await getIpv4Address(frontendHttp);
+  //console.log("Frontend HTTP IPv6 Address: ", frontendHttpIpv6Address);
+  //console.log("Frontend HTTP IPv4 Address: ", frontendHttpIpv4Address);
+  if(!frontendHttpIpv6Address && !frontendHttpIpv4Address) {
+    logger.error("Unable to determine frontend ip address");
+    //console.log("Unable to determine frontend ip address")
+    return false;
+  }
+  const sockets = await io.fetchSockets();
+  for (const socket of sockets) {
+
+    const socketAddress = socket.handshake.address;
+    const socketClient = socket.handshake.query.client;
+    //console.log("Socket address: ", socketAddress, " client: ", socketClient);
+    if (socketClient !== 'frontend')
+      continue;
+
+    if (!net.isIPv4(socketAddress) && !net.isIPv6(socketAddress)){
+      logger.error("Socket handshake address is not in IPv4/IPv6 format");
+      //console.log("Socket handshake address is not in IPv4/IPv6 format");
+      continue;
+    }
+
+    if(socketClient === 'frontend' || socketAddress === frontendHttpIpv6Address || socketAddress === frontendHttpIpv4Address){
+      return true;
+    }
+  
+  }
+ 
+  return false;
 }
 
-function getPairProgrammingRoomSubchannelForSocketId(socketId: string) {
-  let room = "";
+async function getIpv6Address(input: string): Promise<string | undefined> {
 
-  const roomSet = io.sockets.adapter.sids.get(socketId)?.values();
+  if (net.isIPv4(input))
+    return '::ffff:' + input;
 
-  /* istanbul ignore next */
-  if (!roomSet) {
-    logger.error(
-      `Room set for Socket ${socketId} is undefined, but shouldn't be. Event will not be emitted.`
-    );
-    return;
+  if (net.isIPv6(input))
+    return input;
+
+  const temp = input.split(':');
+  const ipAddressWithoutPort = temp[temp.length-1];
+
+  if (net.isIPv4(ipAddressWithoutPort))
+    return '::ffff:' + ipAddressWithoutPort;
+    
+  if (net.isIPv6(ipAddressWithoutPort))
+    return ipAddressWithoutPort;
+
+  const url = new URL(input);
+  const hostname = url.hostname;
+  const lookupAsync = util.promisify(dns.lookup);
+  const address = await lookupAsync(hostname);
+    
+  if(address.family === 6)
+    return address.address;
+
+  if(address.family === 4)
+    return '::ffff:' + address.address;
+
+}
+
+async function getIpv4Address(input: string): Promise<string | undefined> {
+
+  if (net.isIPv4(input))
+    return input;
+
+  if(net.isIPv6(input)){
+    // Check if the IPv6 address has the '::ffff:' prefix indicating it's an IPv6-mapped IPv4 address
+   const regex = /^::ffff:(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/; 
+   const match = input.match(regex);
+
+    if (match) {
+      const ipv4 = `${match[1]}.${match[2]}.${match[3]}.${match[4]}`;
+      return ipv4;
+    }else {
+      return;
+    }
   }
+   
 
-  for (const roomName of roomSet) {
-    if (roomName.includes(":pairprogramming")) {
-      room = roomName;
-      break;
+  const temp = input.split(':');
+  const ipAddressWithoutPort = temp[temp.length-1];
+
+  if (net.isIPv4(ipAddressWithoutPort))
+    return ipAddressWithoutPort;
+    
+  if(net.isIPv6(ipAddressWithoutPort)){
+   // Check if the IPv6 address has the '::ffff:' prefix indicating it's an IPv6-mapped IPv4 address
+   const regex = /^::ffff:(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/; 
+   const match = ipAddressWithoutPort.match(regex);
+
+    if (match) {
+      const ipv4 = `${match[1]}.${match[2]}.${match[3]}.${match[4]}`;
+      return ipv4;
+    }else {
+      return;
     }
   }
 
-  return room;
+  const url = new URL(input);
+  const hostname = url.hostname;
+  const lookupAsync = util.promisify(dns.lookup);
+  const address = await lookupAsync(hostname, {family: 4, all: false});
+  return address.address;
+
 }
 
-function getRoomWithSubchannelForSocketId(socketId: string) {
-  let room = "";
+// #endregion
 
-  const roomSet = io.sockets.adapter.sids.get(socketId)?.values();
-
-  /* istanbul ignore next */
-  if (!roomSet) {
-    logger.error(
-      `Room set for Socket ${socketId} is undefined, but shouldn't be. Event will not be emitted.`
-    );
-    return;
-  }
-
-  for (const roomName of roomSet) {
-    if (roomName.includes(":frontend") || roomName.includes(":ide")) {
-      room = roomName;
-      break;
-    }
-  }
-
-  return room;
-}
-
-function getOppositeRoomWithSubchannelForGivenRoomName(
-  roomWithSubchannel: string
-) {
-  if (roomWithSubchannel) {
-    const oppositeRoom = roomWithSubchannel.includes(":frontend")
-      ? roomWithSubchannel.replace(":frontend", ":ide")
-      : roomWithSubchannel.replace(":ide", ":frontend");
-
-    return oppositeRoom;
-  } else {
-    /* istanbul ignore next */
-    return;
-  }
-}
 
 setupServer();
 
-export { backend, io, server, userInfoMap };
+export { backend, io, server };
